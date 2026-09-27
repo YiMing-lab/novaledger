@@ -1,0 +1,46 @@
+# ==========================================
+# 1. 个人财务数据与加密密钥 (严禁上传 GitHub)
+# ==========================================
+data/
+**/data/
+*.db
+*.db-journal
+*.db-wal
+*.bean
+secrets.json
+config.json
+.transactions.lock
+
+# ==========================================
+# 2. 构建产物与打包安装包
+# ==========================================
+dist/
+build/
+frontend/dist/
+frontend/node_modules/
+novaledger_free/web/static/assets/
+novaledger_free/web/static/index.html
+src-tauri/target/
+src-tauri/binaries/*.exe
+src-tauri/gen/
+
+# ==========================================
+# 3. Python 虚拟环境与缓存
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+*.spec.bak
+
+# ==========================================
+# 4. 操作系统与编辑器文件
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
