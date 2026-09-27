@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>星芒账本 · NovaLedger</title>
+  <link rel="icon" type="image/x-icon" href="/assets/app.ico">
+  <!-- Material Design 3 Stylesheets -->
+  <link rel="stylesheet" href="/css/m3-tokens.css">
+  <link rel="stylesheet" href="/css/m3-layout.css">
+  <link rel="stylesheet" href="/css/m3-components.css">
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ====================================================================
+       Left: Material Design 3 Navigation Rail
+       ==================================================================== -->
+  <aside class="nav-rail">
+    <!-- Brand -->
+    <div class="brand-section">
+      <div class="brand-logo">✧</div>
+      <div class="brand-info">
+        <div class="brand-title">星芒账本</div>
+        <div class="brand-version">M3 桌面版 v1.0</div>
+      </div>
+    </div>
+
+    <!-- Extended FAB (＋ 记一笔) -->
+    <div class="fab-container">
+      <button class="fab-extended" onclick="TransactionsView.openRecordModal()">
+        <span class="fab-icon">＋</span>
+        <span>记一笔</span>
+        <span style="font-size: 11px; opacity: 0.7; font-weight: normal;">(N)</span>
+      </button>
+    </div>
+
+    <!-- Navigation Destinations -->
+    <nav class="nav-destinations">
+      <button class="nav-item active" data-view="transactions">
+        <span class="nav-icon">📝</span>
+        <span>流水明细</span>
+      </button>
+      <button class="nav-item" data-view="accounts">
+        <span class="nav-icon">💳</span>
+        <span>资产与债务</span>
+      </button>
+      <button class="nav-item" data-view="analytics">
+        <span class="nav-icon">📊</span>
+        <span>报表与分析</span>
+      </button>
+      <button class="nav-item" data-view="settings">
+        <span class="nav-icon">⚙️</span>
+        <span>系统设置</span>
+        <span class="badge" id="railPendingBadge" style="display: none;">0</span>
+      </button>
+    </nav>
+
+    <!-- Rail Footer -->
+    <div class="rail-footer">
+      <div class="theme-mode-row">
+        <span>外观主题</span>
+        <button class="theme-toggle-btn" id="themeToggleBtn" onclick="ThemeManager.toggle()">🌙 深色模式</button>
+      </div>
+      <div class="status-indicator-bar">
+        <span class="status-dot" id="ledgerStatusDot"></span>
+        <span id="ledgerStatusText">正在检查账本...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ====================================================================
+       Right: Main Workspace Canvas
+       ==================================================================== -->
+  <main class="main-workspace">
+    <!-- Top App Bar -->
+    <header class="top-app-bar">
+      <div class="top-bar-left">
+        <div>
+          <h1 class="page-title" id="topBarTitle">流水明细</h1>
+          <p class="page-subtitle" id="topBarSubtitle">复式记账明细分录与智能分类</p>
+        </div>
+      </div>
+      <div class="top-bar-right" style="display: flex; align-items: center; gap: 8px;">
+        <button class="m3-btn btn-filled btn-sm" id="topSyncMailBtn" onclick="App.triggerMailSync()">
+          <span>📥 邮箱同步</span>
+        </button>
+        <button class="m3-btn btn-tonal btn-sm" onclick="App.refreshData()">
+          <span>🔄 刷新</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrollable Content Canvas -->
+    <div class="content-canvas">
+
+      <!-- ================================================================
+           VIEW 1: 流水明细 (Transactions)
+           ================================================================ -->
+      <section class="view-pane active" id="transactionsView">
+        <!-- 待确认流水浮动提醒横幅 -->
+        <div id="txPendingAlertBanner" class="m3-card" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); margin-bottom: 12px; padding: 10px 16px; border-radius: 10px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 20px;">⏳</span>
+              <div>
+                <div style="font-size: 13.5px; font-weight: 600; color: var(--md-sys-color-on-surface);" id="pendingAlertTitle">发现 1 笔待确认流水（商户退款/存疑入账）</div>
+                <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);" id="pendingAlertDesc">需要核对并确认冲减分类后计入账本与账户余额</div>
+              </div>
+            </div>
+            <button class="m3-btn btn-filled btn-xs" onclick="App.navigateToPending()" style="background: #f59e0b; color: #1e1b16; font-weight: 600;">
+              立即查看处理 →
+            </button>
+          </div>
+        </div>
+
+        <!-- 筛选与搜索工具栏 -->
+        <div class="m3-card" style="margin-bottom: 12px; padding: 10px 16px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+              <input type="text" id="txSearchInput" class="m3-input compact" placeholder="🔍 搜索商户、描述、分类或金额..." style="width: 260px;">
+              <select id="txMonthFilter" class="m3-select compact" style="width: 130px;">
+                <option value="">全部月份</option>
+              </select>
+              <select id="txAccountFilter" class="m3-select compact" style="width: 150px;">
+                <option value="">全部资金账户</option>
+              </select>
+              <select id="txTypeFilter" class="m3-select compact" style="width: 130px;">
+                <option value="">全部类型</option>
+                <option value="expense">仅支出 (含冲减)</option>
+                <option value="income">仅收入 (含冲减)</option>
+                <option value="offset">↩️ 退款与冲减</option>
+                <option value="transfer">转账还款</option>
+              </select>
+            </div>
+            <div style="font-size: 13px; color: var(--md-sys-color-on-surface-variant);" id="txFilteredCount">
+              共 0 条流水
+            </div>
+          </div>
+        </div>
+
+        <!-- 流水表格 -->
+        <div class="m3-table-wrapper">
+          <table class="m3-table">
+            <thead>
+              <tr>
+                <th style="width: 100px; white-space: nowrap;">交易日期</th>
+                <th style="width: 76px; text-align: center; white-space: nowrap;">类型</th>
+                <th style="min-width: 160px; max-width: 220px; white-space: nowrap;">交易对手 / 商户</th>
+                <th style="min-width: 150px; max-width: 240px; white-space: nowrap;">交易摘要 / 备注</th>
+                <th style="width: 140px; white-space: nowrap;">记账分类</th>
+                <th style="width: 130px; white-space: nowrap;">资金账户</th>
+                <th style="width: 110px; text-align: right; white-space: nowrap;">交易金额</th>
+                <th style="width: 90px; text-align: right; white-space: nowrap;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="txTableBody">
+              <tr><td colspan="8" style="text-align: center; padding: 40px;">正在加载流水数据...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="txPagination"></div>
+      </section>
+
+      <!-- ================================================================
+           VIEW 2: 资产与债务 (Accounts & Debts)
+           ================================================================ -->
+      <section class="view-pane" id="accountsView">
+        <!-- 核心净资产与资产负债总览 -->
+        <div class="metrics-row">
+          <div class="metric-card success">
+            <div class="metric-header">
+              <span class="metric-label">资金总资产</span>
+              <span class="metric-icon">💰</span>
+            </div>
+            <div class="metric-value" id="metricTotalAssets">¥0.00</div>
+            <div class="metric-subtext">全部活跃银行卡、钱包与投资余额</div>
+          </div>
+
+          <div class="metric-card danger">
+            <div class="metric-header">
+              <span class="metric-label">在册总负债</span>
+              <span class="metric-icon">📉</span>
+            </div>
+            <div class="metric-value" id="metricTotalLiabilities">¥0.00</div>
+            <div class="metric-subtext">信用卡欠款与在册个人借款本金</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">核心净资产</span>
+              <span class="metric-icon">💎</span>
+            </div>
+            <div class="metric-value" id="metricNetWorth">¥0.00</div>
+            <div class="metric-subtext">资产减去负债后的真实财富底数</div>
+          </div>
+        </div>
+
+        <!-- 资金账户主卡片 -->
+        <div class="m3-card elevated" style="margin-bottom: 24px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">💳 银行卡与资金资产</div>
+              <div class="card-subtitle" id="activeAccountsCount">0 个活跃账户</div>
+            </div>
+            <button class="m3-btn btn-filled btn-sm" onclick="AccountsView.openAddAccountModal()">＋ 添加资金账户</button>
+          </div>
+          <div id="activeAccountsList"></div>
+        </div>
+
+        <!-- 已归档资金账户专区 (可折叠) -->
+        <div class="m3-card" style="margin-bottom: 24px; background: var(--md-sys-color-surface-container);">
+          <div class="card-header" style="cursor: pointer; margin-bottom: 0;" onclick="AccountsView.toggleArchivedSection()">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="archivedArrow">▶</span>
+              <div class="card-title" style="font-size: 15px;">📁 已归档资金账户</div>
+              <span class="m3-chip" id="archivedAccountsCount" style="height: 22px; font-size: 11px;">0 个已归档</span>
+            </div>
+            <span style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">点击展开/折叠</span>
+          </div>
+          <div id="archivedAccountsBody" style="display: none; margin-top: 16px;">
+            <div id="archivedAccountsList"></div>
+          </div>
+        </div>
+
+        <!-- 个人债务与借款管理 (可折叠) -->
+        <div class="m3-card elevated">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📉 个人债务与借款明细</div>
+              <div class="card-subtitle" id="debtsCount">0 笔在册债务</div>
+            </div>
+            <button class="m3-btn btn-filled btn-sm" onclick="AccountsView.openAddDebtModal()">＋ 新增借款 / 债务</button>
+          </div>
+          <div id="debtsBody">
+            <div id="debtsGrid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           VIEW 3: 报表与分析 (Analytics & CFP)
+           ================================================================ -->
+      <section class="view-pane" id="analyticsView">
+        <!-- 顶部工具栏与月份切换 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <div class="m3-tabs" id="analyticsSubTabs" style="margin-bottom: 0;">
+            <button class="m3-tab-btn active" data-tab="expense">🍰 分类与日度支出</button>
+            <button class="m3-tab-btn" data-tab="merchants">🏪 商户支出分析</button>
+            <button class="m3-tab-btn" data-tab="trends">📈 资产与趋势走势</button>
+            <button class="m3-tab-btn" data-tab="cfp">🛡️ CFP 财务分析</button>
+            <button class="m3-tab-btn" data-tab="ai">✨ AI 智能洞察</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 13px; color: var(--md-sys-color-on-surface-variant);">统计月份:</span>
+            <input type="month" id="analyticsMonthPicker" class="m3-input compact" style="width: 140px;">
+          </div>
+        </div>
+
+        <!-- 子 Tab 1: 支出深度统计 (分类 + 日度横向条形分布) -->
+        <div id="expenseTab">
+          <div class="grid-2col">
+            <div class="m3-card elevated">
+              <div class="card-header">
+                <div class="card-title">支出分类占比</div>
+              </div>
+              <div id="expenseDonutContainer" style="display: flex; flex-direction: column; align-items: center;"></div>
+            </div>
+            <div class="m3-card elevated">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">分类支出排行</div>
+                  <div class="card-subtitle">点击分类行可下钻展开查看商户排名与频次</div>
+                </div>
+              </div>
+              <div class="m3-table-wrapper">
+                <table class="m3-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;">#</th>
+                      <th>分类 (点击展开下钻)</th>
+                      <th style="width: 120px;">占比条</th>
+                      <th style="text-align: right; width: 140px;">支出金额</th>
+                    </tr>
+                  </thead>
+                  <tbody id="expenseRankTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 当月日度支出分布 (横向条形图) -->
+          <div class="m3-card elevated" style="margin-top: 20px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div class="card-title">📅 当月日度支出分布 (横向分布图)</div>
+                <div class="card-subtitle" id="dailyExpenseSubtitle">日均支出: ¥0.00 | 峰值日: -</div>
+              </div>
+              <div class="segmented-group" id="dailyExpenseFilterGroup">
+                <button class="segmented-btn active" data-mode="all" onclick="AnalyticsView.switchDailyExpenseMode('all')">全部日期</button>
+                <button class="segmented-btn" data-mode="active" onclick="AnalyticsView.switchDailyExpenseMode('active')">仅看有支出日期</button>
+              </div>
+            </div>
+            <div id="dailyExpenseBarContainer" style="width: 100%; min-height: 180px;"></div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 2: 商户支出分析 -->
+        <div id="merchantsTab" style="display: none;">
+          <!-- 商户摘要指标行 -->
+          <div class="metrics-row" style="margin-bottom: 20px;">
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-label">消费商户总数</span>
+                <span class="metric-icon">🏪</span>
+              </div>
+              <div class="metric-value" id="merchantTotalCount">0 家</div>
+              <div class="metric-subtext">当月产生实际消费的商户</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-label">头部商户集中度</span>
+                <span class="metric-icon">🏆</span>
+              </div>
+              <div class="metric-value" id="merchantTopRatio">0.0%</div>
+              <div class="metric-subtext">Top 3 商户支出占月支出总额比重</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-label">单笔平均消费</span>
+                <span class="metric-icon">💳</span>
+              </div>
+              <div class="metric-value" id="merchantAvgPerTx">¥0.00</div>
+              <div class="metric-subtext">当月消费总额 / 累计笔数均值</div>
+            </div>
+          </div>
+
+          <div class="m3-card elevated">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div class="card-title">全量商户支出综合排行</div>
+                <div class="card-subtitle" id="merchantRankingSubtitle">按商户多维统计当月支出、消费频次与单笔均额</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="merchantSearchInput" class="m3-input compact" placeholder="🔍 快速搜索商户..." style="width: 170px;" oninput="AnalyticsView.onMerchantSearch(this.value)">
+                <div class="segmented-group" id="merchantSortGroup">
+                  <button class="segmented-btn active" data-sort="amount" onclick="AnalyticsView.switchMerchantSort('amount')">按总额 ↓</button>
+                  <button class="segmented-btn" data-sort="count" onclick="AnalyticsView.switchMerchantSort('count')">按频次 ↓</button>
+                  <button class="segmented-btn" data-sort="avg" onclick="AnalyticsView.switchMerchantSort('avg')">按均额 ↓</button>
+                </div>
+              </div>
+            </div>
+            <div class="m3-table-wrapper">
+              <table class="m3-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">#</th>
+                    <th>商户名称</th>
+                    <th style="width: 90px; text-align: center;">消费频次</th>
+                    <th style="width: 110px; text-align: right;">单笔均额</th>
+                    <th>涉及分类</th>
+                    <th style="width: 120px;">月度占比</th>
+                    <th style="text-align: right; width: 130px;">累计支出金额</th>
+                  </tr>
+                </thead>
+                <tbody id="merchantRankTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 3: 趋势多维分析 (资产折线图 + 收支柱状图 + 历史结余表) -->
+        <div id="trendsTab" style="display: none;">
+          <!-- 资金资产多线折线图 -->
+          <div class="m3-card elevated" style="margin-bottom: 20px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div class="card-title">💳 各资金资产账户变化走势</div>
+                <div class="card-subtitle" id="assetTrendsSubtitle">各银行卡与资金资产账户余额走势轨迹</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div class="segmented-group" id="assetTrendModeGroup">
+                  <button class="segmented-btn active" data-mode="monthly" onclick="AnalyticsView.switchAssetTrendMode('monthly')">按月走势 (近12个月)</button>
+                  <button class="segmented-btn" data-mode="daily" onclick="AnalyticsView.switchAssetTrendMode('daily')">按日走势 (当月每日)</button>
+                </div>
+              </div>
+            </div>
+            <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;" id="assetChipsContainer">
+              <!-- 动态渲染账户开关 Chips -->
+            </div>
+            <div id="assetMultiLineContainer" style="width: 100%; min-height: 320px;"></div>
+          </div>
+
+          <div class="m3-card elevated" style="margin-bottom: 20px;">
+            <div class="card-header">
+              <div class="card-title">近 12 个月收支对比趋势</div>
+              <div style="display: flex; gap: 12px; font-size: 12px;">
+                <span style="color: var(--md-sys-color-success);">■ 收入</span>
+                <span style="color: var(--md-sys-color-error);">■ 支出</span>
+              </div>
+            </div>
+            <div id="trendsBarContainer" style="width: 100%; min-height: 300px;"></div>
+          </div>
+          <div class="m3-card">
+            <div class="card-header">
+              <div class="card-title">历史月度结余数据</div>
+            </div>
+            <div class="m3-table-wrapper">
+              <table class="m3-table">
+                <thead>
+                  <tr>
+                    <th>月份</th>
+                    <th>月度总收入</th>
+                    <th>月度总支出</th>
+                    <th>当月净结余</th>
+                    <th>储蓄率</th>
+                  </tr>
+                </thead>
+                <tbody id="trendsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 3: CFP 财务分析 -->
+        <div id="cfpTab" style="display: none;">
+          <div class="metrics-row">
+            <div class="metric-card">
+              <div class="metric-label">核心净资产</div>
+              <div class="metric-value" id="cfpNetWorth">¥0.00</div>
+              <div class="metric-subtext">标准: 长期稳健增长</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">负债资产比率</div>
+              <div class="metric-value" id="cfpDebtRatio">-</div>
+              <div class="metric-subtext">健康标准: &lt; 50%</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">流动性月度覆盖</div>
+              <div class="metric-value" id="cfpLiquidity">-</div>
+              <div class="metric-subtext">健康标准: 3 ~ 6 个月</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">个人储蓄率</div>
+              <div class="metric-value" id="cfpSavingsRate">-</div>
+              <div class="metric-subtext">健康标准: &gt; 30%</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">偿债压力比率</div>
+              <div class="metric-value" id="cfpDebtService">-</div>
+              <div class="metric-subtext">健康标准: &lt; 35%</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 4: AI 智能洞察 -->
+        <div id="aiTab" style="display: none;">
+          <div class="m3-card elevated">
+            <div class="card-header">
+              <div class="card-title">✨ Gemini CFP 深度月度财务管家报告</div>
+              <button class="m3-btn btn-filled btn-sm" id="generateAIBtn" onclick="AnalyticsView.generateAIReport()">🚀 一键生成本月诊断</button>
+            </div>
+            <div id="aiReportOutput" style="padding: 16px; background: var(--md-sys-color-surface-container); border-radius: var(--md-shape-md); min-height: 180px;">
+              <p style="color: var(--md-sys-color-on-surface-variant);">点击右上角按钮，结合当月收支、债务比率与结余，由大模型为您量身生成财务建议与健康度诊断。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           VIEW 4: 系统设置与工具 (Settings & Tools)
+           ================================================================ -->
+      <section class="view-pane" id="settingsView">
+        <div class="m3-tabs" id="settingsSubTabs">
+          <button class="m3-tab-btn active" data-tab="import">📥 账单导入</button>
+          <button class="m3-tab-btn" data-tab="categories">🏷️ 分类管理</button>
+          <button class="m3-tab-btn" data-tab="pending">⏳ 待确认流水</button>
+          <button class="m3-tab-btn" data-tab="services">🌐 邮箱与AI设置</button>
+          <button class="m3-tab-btn" data-tab="backup">📦 账本与备份</button>
+          <button class="m3-tab-btn" data-tab="recon">⚖️ 对账校准</button>
+        </div>
+
+        <!-- 子 Tab 1: 账单导入 -->
+        <div id="importTab">
+          <div class="m3-card elevated" style="max-width: 760px;">
+            <div class="card-title" style="margin-bottom: 16px;">📥 外部对账单导入与智能去重流水线</div>
+            
+            <div id="importDropZone" style="border: 2px dashed var(--md-sys-color-outline); border-radius: var(--md-shape-lg); padding: 40px; text-align: center; cursor: pointer; transition: all 200ms ease; margin-bottom: 20px;">
+              <div style="font-size: 36px; margin-bottom: 8px;">📂</div>
+              <div style="font-weight: 600; font-size: 15px;">点击选择账单文件，或将文件直接拖拽至此处</div>
+              <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant); margin-top: 4px;">支持微信支付 CSV、支付宝账单 CSV、招行动账通知 .eml 邮件及通用 CSV</div>
+              <input type="file" id="importFileInput" accept=".csv,.eml" style="display: none;">
+              <div id="importSelectedFileName" style="margin-top: 12px; font-weight: bold; color: var(--md-sys-color-primary);"></div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+              <div class="m3-field-group">
+                <label class="m3-label">账单来源格式</label>
+                <select id="importSourceType" class="m3-select">
+                  <option value="wechat_csv">微信支付账单 (CSV)</option>
+                  <option value="alipay_csv">支付宝账单 (CSV)</option>
+                  <option value="bank_email">银行动账邮件 (.eml)</option>
+                  <option value="generic_csv">标准通用账单 (CSV)</option>
+                </select>
+              </div>
+              <div class="m3-field-group">
+                <label class="m3-label">默认入账出资账户</label>
+                <select id="importDefaultAccount" class="m3-select"></select>
+              </div>
+            </div>
+
+            <div style="text-align: right;">
+              <button class="m3-btn btn-filled" id="importUploadBtn" onclick="SettingsView.submitUpload()">开始解析并导入入账</button>
+            </div>
+
+            <div id="importResultSummary"></div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 2: 分类管理 -->
+        <div id="categoriesTab" style="display: none;">
+          <div class="m3-card elevated">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div class="card-title">🏷️ 收支分类与 Beancount 会计科目映射</div>
+                <div class="card-subtitle">支持修改分类名称、个性化图标、删减归档与多分类平滑合并迁移</div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                <button class="m3-btn btn-outlined btn-sm" onclick="SettingsView.openMergeCategoryModal()">🔀 合并分类</button>
+                <button class="m3-btn btn-filled btn-sm" onclick="SettingsView.openAddCategoryModal()">＋ 新建分类</button>
+              </div>
+            </div>
+            <div id="categoriesList"></div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 3: 待确认交易清单 -->
+        <div id="pendingTab" style="display: none;">
+          <div class="m3-card elevated">
+            <div class="card-header">
+              <div>
+                <div class="card-title">⏳ 待人工确认交易清单</div>
+                <div class="card-subtitle">导入时未完全匹配规则或存在歧义的交易，经人工核准后方写入 Beancount 账本</div>
+              </div>
+              <span class="m3-chip" id="pendingCountTag">0 笔待处理</span>
+            </div>
+            <div class="m3-table-wrapper">
+              <table class="m3-table">
+                <thead>
+                  <tr>
+                    <th>交易日期</th>
+                    <th>对手商户</th>
+                    <th>原始摘要</th>
+                    <th style="text-align: right;">金额</th>
+                    <th>核定出资账户</th>
+                    <th>核定分类</th>
+                    <th style="text-align: right;">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="pendingTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 4: 邮箱与 AI 服务配置 -->
+        <div id="servicesTab" style="display: none;">
+          <div class="grid-2col">
+            <!-- 邮箱设置 -->
+            <div class="m3-card elevated">
+              <div class="card-title">✉️ 银行对账单 IMAP 邮箱自动同步</div>
+              <div class="card-subtitle" style="margin-bottom: 16px;">定时拉取银行动账与电子对账单，实现秒级无感记账</div>
+              
+              <div class="m3-field-group" style="margin-bottom: 12px;">
+                <label class="m3-label">IMAP 服务器地址</label>
+                <input type="text" id="cfgImapHost" class="m3-input" placeholder="例如: imap.qq.com 或 imap.163.com">
+              </div>
+              <div class="m3-field-group" style="margin-bottom: 12px;">
+                <label class="m3-label">端口号 (SSL)</label>
+                <input type="number" id="cfgImapPort" class="m3-input" value="993">
+              </div>
+              <div class="m3-field-group" style="margin-bottom: 12px;">
+                <label class="m3-label">邮箱账号</label>
+                <input type="text" id="cfgImapUser" class="m3-input" placeholder="your_email@example.com">
+              </div>
+              <div class="m3-field-group" style="margin-bottom: 16px;">
+                <label class="m3-label">授权码 / 专用应用密码</label>
+                <input type="password" id="cfgImapCode" class="m3-input" placeholder="留空则保持既有凭据不变">
+              </div>
+
+              <div style="margin-bottom: 14px; font-size: 13px;">
+                当前授权码状态: <b id="cfgMailCodeStatus" style="color: var(--md-sys-color-warning);">未配置</b>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+                <button class="m3-btn btn-tonal" onclick="App.triggerMailSync()">📥 立即从邮箱同步</button>
+                <button class="m3-btn btn-outlined" onclick="SettingsView.testMail()">测试连接</button>
+                <button class="m3-btn btn-filled" onclick="SettingsView.saveMailConfig()">保存配置</button>
+              </div>
+            </div>
+
+            <!-- AI 设置 -->
+            <div class="m3-card elevated">
+              <div class="card-title">✨ Google Gemini AI 智能助手配置</div>
+              <div class="card-subtitle" style="margin-bottom: 16px;">用于记账智能分类推荐与月度 CFP 深度财务管家诊断</div>
+
+              <div style="margin-bottom: 14px; font-size: 13px;">
+                当前密钥状态: <b id="cfgAIKeyStatus" style="color: var(--md-sys-color-warning);">未配置</b>
+              </div>
+
+              <div class="m3-field-group" style="margin-bottom: 16px;">
+                <label class="m3-label">Gemini API Key</label>
+                <input type="password" id="cfgGeminiKey" class="m3-input" placeholder="AIzaSy...">
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button class="m3-btn btn-outlined" onclick="SettingsView.testAI()">测试 API 连通性</button>
+                <button class="m3-btn btn-filled" onclick="SettingsView.saveAIConfig()">加密保存密钥</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 5: 账本与备份 -->
+        <div id="backupTab" style="display: none;">
+          <div class="m3-card elevated" style="max-width: 680px;">
+            <div class="card-title">📦 Beancount 账本安全与数据备份</div>
+            <div class="card-subtitle" style="margin-bottom: 16px;">零冗余流式打包，纯净备份账本、元数据与本地凭据</div>
+
+            <div id="ledgerValidationStatus" style="margin-bottom: 20px; padding: 14px; background: var(--md-sys-color-surface-container); border-radius: var(--md-shape-sm);"></div>
+
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--md-sys-color-surface-container-low); border-radius: var(--md-shape-sm);">
+                <div>
+                  <div style="font-weight: 600;">导出完整账本备份包 (ZIP)</div>
+                  <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">自动排除可执行文件与日志，体积仅几十 KB，秒级下载</div>
+                </div>
+                <button class="m3-btn btn-filled btn-sm" onclick="SettingsView.triggerExportBackup()">⬇️ 导出备份包</button>
+              </div>
+
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--md-sys-color-surface-container-low); border-radius: var(--md-shape-sm);">
+                <div>
+                  <div style="font-weight: 600;">从备份包还原账本</div>
+                  <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">上传 .zip 还原账本，系统将自动创建还原前快照</div>
+                </div>
+                <label class="m3-btn btn-outlined btn-sm" style="cursor: pointer;">
+                  ⬆️ 上传并还原
+                  <input type="file" accept=".zip" style="display: none;" onchange="SettingsView.triggerImportBackup(this)">
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 子 Tab 6: 对账校准 -->
+        <div id="reconTab" style="display: none;">
+          <div class="m3-card elevated" style="max-width: 640px;">
+            <div class="card-title">⚖️ 资金账户余额对账与校准分录</div>
+            <div class="card-subtitle" style="margin-bottom: 16px;">核对 Beancount 账面累计余额与银行实际对账单，平滑生成校准分录</div>
+
+            <div class="m3-field-group" style="margin-bottom: 12px;">
+              <label class="m3-label">选择资金账户</label>
+              <select id="reconAccountSelect" class="m3-select"></select>
+            </div>
+            <div class="m3-field-group" style="margin-bottom: 12px;">
+              <label class="m3-label">核对基准日期</label>
+              <input type="date" id="reconDate" class="m3-input">
+            </div>
+            <div class="m3-field-group" style="margin-bottom: 16px;">
+              <label class="m3-label">银行/机构实际余额 (¥)</label>
+              <input type="number" step="0.01" id="reconActualBalance" class="m3-input" placeholder="0.00">
+            </div>
+
+            <div style="text-align: right; margin-bottom: 16px;">
+              <button class="m3-btn btn-filled" onclick="SettingsView.checkReconciliation()">核对差额</button>
+            </div>
+
+            <div id="reconResultDiv" style="display: none;"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ====================================================================
+     Material Design 3 Modal Dialogs
+     ==================================================================== -->
+
+<!-- 1. 记一笔弹窗 -->
+<div class="modal-scrim" id="recordModal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title">＋ 快速入账</div>
+      <button class="modal-close-btn" onclick="Dialog.close('recordModal')">✕</button>
+    </div>
+    <form id="recForm" onsubmit="event.preventDefault(); TransactionsView.submitRecord();">
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">记账类型</label>
+            <select id="recType" class="m3-select" onchange="TransactionsView.toggleRecordFields()">
+              <option value="expense">支出 (Expense)</option>
+              <option value="income">收入 (Income)</option>
+              <option value="transfer">内部转账 (Transfer)</option>
+              <option value="repayment">信用卡还款</option>
+              <option value="debt_repayment">📉 偿还借款 / 债务</option>
+              <option value="refund">退款入账 (支出对冲)</option>
+            </select>
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">交易日期</label>
+            <input type="date" id="recDate" class="m3-input" required oninput="TransactionsView.updatePostingPreview('rec')">
+          </div>
+        </div>
+
+        <!-- 统一对冲模式开关 -->
+        <div class="m3-field-group" id="recOffsetGroup" style="display: none; padding: 8px 12px; background: var(--md-sys-color-surface-container); border-radius: var(--md-shape-sm); border: 1px dashed var(--md-sys-color-outline-variant);">
+          <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="recIsOffset" onchange="TransactionsView.onOffsetToggle('rec')" style="width: 16px; height: 16px; cursor: pointer;">
+            <span style="font-weight: 600; font-size: 13px; color: var(--md-sys-color-primary);" id="recOffsetTitle">↩️ 开启对冲/退款冲减模式</span>
+          </label>
+          <div id="recOffsetHint" style="font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-top: 2px;">
+            将以红字冲减原损益科目，真实降低对应科目的发生净额，杜绝虚增
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">交易对手 / 商户</label>
+            <input type="text" id="recPayee" class="m3-input" placeholder="例如: 7-Eleven、招商银行" oninput="TransactionsView.updatePostingPreview('rec')">
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">交易金额 (¥)</label>
+            <input type="number" step="0.01" id="recAmount" class="m3-input" placeholder="0.00" required oninput="TransactionsView.updatePostingPreview('rec')">
+          </div>
+        </div>
+
+        <div class="m3-field-group">
+          <label class="m3-label">摘要描述</label>
+          <input type="text" id="recNarration" class="m3-input" placeholder="例如: 购买日用品、朋友聚餐" oninput="TransactionsView.updatePostingPreview('rec')">
+        </div>
+
+        <div class="m3-field-group">
+          <label class="m3-label" id="recAccountLabel">扣款资金账户</label>
+          <select id="recAccount" class="m3-select" required onchange="TransactionsView.updatePostingPreview('rec')"></select>
+        </div>
+
+        <div class="m3-field-group" id="recToAccountGroup" style="display: none;">
+          <label class="m3-label" id="recToAccountLabel">转入/还款目标账户</label>
+          <select id="recToAccount" class="m3-select" onchange="TransactionsView.updatePostingPreview('rec')"></select>
+        </div>
+
+        <div class="m3-field-group" id="recCategoryGroup">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label class="m3-label" id="recCategoryLabel">记账分类</label>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <button type="button" class="m3-btn btn-text btn-sm" onclick="TransactionsView.openAddCategoryModal('recordModal')">＋ 新建分类</button>
+              <button type="button" class="m3-btn btn-text btn-sm" onclick="TransactionsView.requestAISuggestion()">✨ AI 智能建议</button>
+            </div>
+          </div>
+          <select id="recCategory" class="m3-select" onchange="TransactionsView.updatePostingPreview('rec')"></select>
+        </div>
+
+        <!-- 实时 Beancount 复式分录借贷预览卡片 -->
+        <div class="m3-card" id="recPostingPreviewCard" style="padding: 10px 14px; background: var(--md-sys-color-surface-container); border-radius: var(--md-shape-sm); border: 1px solid var(--md-sys-color-outline-variant);">
+          <div style="font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+            <span>⚖️ 复式借贷流向预览 (Beancount Preview)</span>
+            <span id="recPreviewBadge" class="m3-chip" style="height: 18px; font-size: 10px; padding: 0 6px;">借贷平衡</span>
+          </div>
+          <div id="recPreviewContent" style="font-family: var(--md-sys-typescale-font-family-code); font-size: 12px; line-height: 1.6; color: var(--md-sys-color-on-surface);">
+            <!-- 由 JS 实时计算渲染 -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('recordModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">保存入账</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 2. 编辑流水弹窗 -->
+<div class="modal-scrim" id="editTxModal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title">编辑账目流水</div>
+      <button class="modal-close-btn" onclick="Dialog.close('editTxModal')">✕</button>
+    </div>
+    <form id="editTxForm" onsubmit="event.preventDefault(); TransactionsView.submitEdit();">
+      <input type="hidden" id="editTxId">
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">记账业务类型</label>
+            <select id="editTxType" class="m3-select" onchange="TransactionsView.toggleEditFields()">
+              <option value="expense">支出 (Expense)</option>
+              <option value="income">收入 (Income)</option>
+              <option value="transfer">内部转账 (Transfer)</option>
+              <option value="repayment">信用卡还款</option>
+              <option value="debt_repayment">📉 偿还借款 / 债务</option>
+            </select>
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">交易日期</label>
+            <input type="date" id="editTxDate" class="m3-input" required oninput="TransactionsView.updatePostingPreview('editTx')">
+          </div>
+        </div>
+
+        <!-- 统一对冲模式开关 -->
+        <div class="m3-field-group" id="editTxOffsetGroup" style="display: none; padding: 8px 12px; background: var(--md-sys-color-surface-container); border-radius: var(--md-shape-sm); border: 1px dashed var(--md-sys-color-outline-variant);">
+          <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="editTxIsOffset" onchange="TransactionsView.onOffsetToggle('editTx')" style="width: 16px; height: 16px; cursor: pointer;">
+            <span style="font-weight: 600; font-size: 13px; color: var(--md-sys-color-primary);" id="editTxOffsetTitle">↩️ 开启对冲/退款冲减模式</span>
+          </label>
+          <div id="editTxOffsetHint" style="font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-top: 2px;">
+            将以红字冲减原损益科目，真实降低对应科目的发生净额，杜绝虚增
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">交易商户 / 对手</label>
+            <input type="text" id="editTxPayee" class="m3-input" oninput="TransactionsView.updatePostingPreview('editTx')">
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">金额 (¥)</label>
+            <input type="number" step="0.01" id="editTxAmount" class="m3-input" required oninput="TransactionsView.updatePostingPreview('editTx')">
+          </div>
+        </div>
+
+        <div class="m3-field-group">
+          <label class="m3-label">摘要说明</label>
+          <input type="text" id="editTxNarration" class="m3-input" oninput="TransactionsView.updatePostingPreview('editTx')">
+        </div>
+
+        <div class="m3-field-group" id="editTxAccountGroup">
+          <label class="m3-label" id="editTxAccountLabel">扣款资金账户</label>
+          <select id="editTxAccount" class="m3-select" required onchange="TransactionsView.updatePostingPreview('editTx')"></select>
+        </div>
+
+        <div class="m3-field-group" id="editTxToAccountGroup" style="display: none;">
+          <label class="m3-label" id="editTxToAccountLabel">转入/还款目标账户</label>
+          <select id="editTxToAccount" class="m3-select" onchange="TransactionsView.updatePostingPreview('editTx')"></select>
+        </div>
+
+        <div class="m3-field-group" id="editTxCategoryGroup">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label class="m3-label" id="editTxCategoryLabel">记账分类 / 科目</label>
+            <button type="button" class="m3-btn btn-text btn-sm" onclick="TransactionsView.openAddCategoryModal('editTxModal')">＋ 新建分类</button>
+          </div>
+          <select id="editTxCategory" class="m3-select" onchange="TransactionsView.updatePostingPreview('editTx')"></select>
+        </div>
+
+        <!-- 实时 Beancount 复式分录借贷预览卡片 -->
+        <div class="m3-card" id="editTxPostingPreviewCard" style="padding: 10px 14px; background: var(--md-sys-color-surface-container); border-radius: var(--md-shape-sm); border: 1px solid var(--md-sys-color-outline-variant);">
+          <div style="font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+            <span>⚖️ 复式借贷流向预览 (Beancount Preview)</span>
+            <span id="editTxPreviewBadge" class="m3-chip" style="height: 18px; font-size: 10px; padding: 0 6px;">借贷平衡</span>
+          </div>
+          <div id="editTxPreviewContent" style="font-family: var(--md-sys-typescale-font-family-code); font-size: 12px; line-height: 1.6; color: var(--md-sys-color-on-surface);">
+            <!-- 由 JS 实时计算渲染 -->
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+          <input type="checkbox" id="editTxRememberRule" style="width: 16px; height: 16px;">
+          <label for="editTxRememberRule" style="font-size: 13px; color: var(--md-sys-color-on-surface-variant);">
+            记住此商户分类规则（后续自动分类）
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('editTxModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">确认修改</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 3. 添加账户弹窗 -->
+<div class="modal-scrim" id="addAccountModal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title">＋ 添加资金账户</div>
+      <button class="modal-close-btn" onclick="Dialog.close('addAccountModal')">✕</button>
+    </div>
+    <form id="addAccForm" onsubmit="event.preventDefault(); AccountsView.submitAddAccount();">
+      <div class="modal-body">
+        <div class="m3-field-group">
+          <label class="m3-label">唯一标识 ID (英文/拼音)</label>
+          <input type="text" id="addAccId" class="m3-input" placeholder="例如: cmb_8225, alipay" required>
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">账户中文名称</label>
+          <input type="text" id="addAccName" class="m3-input" placeholder="例如: 招商银行储蓄卡(8225)" required>
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">账户类别</label>
+          <select id="addAccType" class="m3-select">
+            <option value="debit">💳 储蓄卡 (Debit Card)</option>
+            <option value="credit">💳 信用卡 (Credit Card)</option>
+            <option value="cash">💵 现金钱包 (Cash)</option>
+            <option value="e_wallet">📱 电子钱包 (WeChat/Alipay)</option>
+            <option value="investment">📈 投资证券 (Brokerage)</option>
+          </select>
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">科目细分代码</label>
+          <input type="text" id="addAccSubName" class="m3-input" placeholder="例如: CMB:Card8225">
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">初始建账余额 (¥)</label>
+          <input type="number" step="0.01" id="addAccInitialBalance" class="m3-input" value="0.00">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('addAccountModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">创建账户</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 4. 编辑账户弹窗 -->
+<div class="modal-scrim" id="editAccountModal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title">编辑资金账户</div>
+      <button class="modal-close-btn" onclick="Dialog.close('editAccountModal')">✕</button>
+    </div>
+    <form id="editAccForm" onsubmit="event.preventDefault(); AccountsView.submitEditAccount();">
+      <input type="hidden" id="editAccId">
+      <div class="modal-body">
+        <div class="m3-field-group">
+          <label class="m3-label">账户名称</label>
+          <input type="text" id="editAccName" class="m3-input" required>
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">卡尾号 (后四位)</label>
+          <input type="text" id="editAccTail" class="m3-input" placeholder="例如: 8225">
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">账户类别</label>
+          <select id="editAccType" class="m3-select">
+            <option value="debit">💳 储蓄卡</option>
+            <option value="credit">💳 信用卡</option>
+            <option value="cash">💵 现金钱包</option>
+            <option value="e_wallet">📱 电子钱包</option>
+            <option value="investment">📈 投资证券</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+          <input type="checkbox" id="editAccArchived" style="width: 16px; height: 16px;">
+          <label for="editAccArchived" style="font-size: 13px; color: var(--md-sys-color-on-surface);">
+            归档此账户（移入下方「📁 已归档资金账户」专区并在日常记账中隐藏，不影响历史复式账目）
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('editAccountModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">保存变更</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 5. 新增债务弹窗 -->
+<div class="modal-scrim" id="addDebtModal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title">＋ 登记借款 / 个人债务</div>
+      <button class="modal-close-btn" onclick="Dialog.close('addDebtModal')">✕</button>
+    </div>
+    <form id="addDebtForm" onsubmit="event.preventDefault(); AccountsView.submitAddDebt();">
+      <div class="modal-body">
+        <div class="m3-field-group">
+          <label class="m3-label">借款/债务名称</label>
+          <input type="text" id="addDebtName" class="m3-input" placeholder="例如: 小姨-房子抵押贷款、微粒贷" required>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">初始借款金额 (¥)</label>
+            <input type="number" step="0.01" id="addDebtInitialAmount" class="m3-input" required>
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">还款类型</label>
+            <select id="addDebtType" class="m3-select">
+              <option value="monthly">按月分期等额还款</option>
+              <option value="lump_sum">到期一次性本息</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">每月应还金额 (¥)</label>
+            <input type="number" step="0.01" id="addDebtMonthlyPayment" class="m3-input" placeholder="0.00">
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">总期数</label>
+            <input type="number" id="addDebtTotalPeriods" class="m3-input" placeholder="期数 (可选)">
+          </div>
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">应还日 / 截止日期</label>
+          <input type="date" id="addDebtDueDate" class="m3-input">
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">备注说明</label>
+          <input type="text" id="addDebtNote" class="m3-input" placeholder="还款约定与利率等">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('addDebtModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">确认登记</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 6. 编辑债务弹窗 -->
+<div class="modal-scrim" id="editDebtModal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title">编辑债务信息</div>
+      <button class="modal-close-btn" onclick="Dialog.close('editDebtModal')">✕</button>
+    </div>
+    <form id="editDebtForm" onsubmit="event.preventDefault(); AccountsView.submitEditDebt();">
+      <input type="hidden" id="editDebtId">
+      <div class="modal-body">
+        <div class="m3-field-group">
+          <label class="m3-label">债务名称</label>
+          <input type="text" id="editDebtName" class="m3-input" required>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">初始本金 (¥)</label>
+            <input type="number" step="0.01" id="editDebtInitialAmount" class="m3-input">
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">还款类型</label>
+            <select id="editDebtType" class="m3-select">
+              <option value="monthly">按月分期等额还款</option>
+              <option value="lump_sum">到期一次性本息</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="m3-field-group">
+            <label class="m3-label">每月应还金额 (¥)</label>
+            <input type="number" step="0.01" id="editDebtMonthlyPayment" class="m3-input">
+          </div>
+          <div class="m3-field-group">
+            <label class="m3-label">总期数</label>
+            <input type="number" id="editDebtTotalPeriods" class="m3-input">
+          </div>
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">截止日期</label>
+          <input type="date" id="editDebtDueDate" class="m3-input">
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">备注说明</label>
+          <input type="text" id="editDebtNote" class="m3-input">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('editDebtModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">保存变更</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 7. 新建分类弹窗 (引导式预设与智能规范化) -->
+<div class="modal-scrim" id="addCategoryModal" style="z-index: 1060;">
+  <div class="modal-dialog" style="max-width: 520px;">
+    <div class="modal-header">
+      <div class="modal-title">＋ 新建记账分类</div>
+      <button class="modal-close-btn" onclick="Dialog.close('addCategoryModal')">✕</button>
+    </div>
+    <form id="addCatForm" onsubmit="event.preventDefault(); SettingsView.submitAddCategory();">
+      <div class="modal-body">
+        <!-- 分类性质单选 -->
+        <div class="m3-field-group">
+          <label class="m3-label">分类性质</label>
+          <div style="display: flex; gap: 20px; padding: 2px 0;">
+            <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; color: var(--md-sys-color-on-surface);">
+              <input type="radio" name="addCatTypeRadio" value="expense" checked onchange="SettingsView.onCategoryTypeChange('expense')">
+              <span>支出分类 (Expenses)</span>
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; color: var(--md-sys-color-on-surface);">
+              <input type="radio" name="addCatTypeRadio" value="income" onchange="SettingsView.onCategoryTypeChange('income')">
+              <span>收入分类 (Income)</span>
+            </label>
+          </div>
+          <input type="hidden" id="addCatType" value="expense">
+        </div>
+
+        <!-- 常用分类预设 -->
+        <div class="m3-field-group">
+          <label class="m3-label">分类预设模版 / 归属主科目</label>
+          <select id="addCatPreset" class="m3-select" onchange="SettingsView.onCategoryPresetChange()"></select>
+        </div>
+
+        <!-- 分类显示名称 -->
+        <div class="m3-field-group">
+          <label class="m3-label">分类显示名称 (日常记账下拉展示)</label>
+          <input type="text" id="addCatName" class="m3-input" placeholder="例如: 旅行支出、咖啡水果、数码配件" required oninput="SettingsView.onCategoryNameInput()">
+        </div>
+
+        <!-- 二级细分代码 (可选) -->
+        <div class="m3-field-group" id="addCatSubGroup">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label class="m3-label">细分子科目英文代号 (可选)</label>
+            <span style="font-size: 11px; color: var(--md-sys-color-on-surface-variant);">留空则直接使用主分类科目</span>
+          </div>
+          <input type="text" id="addCatSub" class="m3-input" placeholder="例如: Hotel、Flight、Coffee (自动格式化规范)" oninput="SettingsView.updateCategoryPreview()">
+        </div>
+
+        <!-- 自定义科目全路径 (当选择自定义时显示) -->
+        <div class="m3-field-group" id="addCatCustomGroup" style="display: none;">
+          <label class="m3-label">自定义 Beancount 科目代码</label>
+          <input type="text" id="addCatCustomAccount" class="m3-input" placeholder="例如: Expenses:Vehicle:Fuel 或 Vehicle:Fuel" oninput="SettingsView.updateCategoryPreview()">
+        </div>
+
+        <!-- 实时 Beancount 科目规范化与开户预览卡片 -->
+        <div class="m3-card" style="padding: 10px 14px; background: var(--md-sys-color-surface-container); border-radius: var(--md-shape-sm); border: 1px solid var(--md-sys-color-outline-variant);">
+          <div style="font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between;">
+            <span>🏷️ 对应 Beancount 会计科目</span>
+            <span id="addCatFormatBadge" style="font-size: 11px; color: var(--md-sys-color-primary); font-weight: 500;">✓ 格式规范且自动开户</span>
+          </div>
+          <div id="addCatPreviewAccount" style="font-family: var(--md-sys-typescale-font-family-code); font-weight: 600; font-size: 14px; color: var(--md-sys-color-primary); word-break: break-all;">Expenses:Travel</div>
+          <input type="hidden" id="addCatAccount" value="Expenses:Travel">
+        </div>
+
+        <!-- Emoji 图标选择与快捷盘 -->
+        <div class="m3-field-group">
+          <label class="m3-label">分类图标 (Emoji)</label>
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+            <input type="text" id="addCatIcon" class="m3-input" placeholder="例如: ✈️" style="width: 70px; text-align: center; font-size: 18px;" oninput="SettingsView.updateCategoryPreview()">
+            <span style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">点击下方常用图标快速选取：</span>
+          </div>
+          <div id="addCatEmojiPicker" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; background: var(--md-sys-color-surface-container-low); border-radius: var(--md-shape-sm); border: 1px solid var(--md-sys-color-outline-variant); max-height: 84px; overflow-y: auto;">
+            <!-- 由 JS 填充快捷 Emoji -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('addCategoryModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">确认创建并自动开户</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 8. 编辑分类弹窗 -->
+<div class="modal-scrim" id="editCategoryModal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title">编辑记账分类</div>
+      <button class="modal-close-btn" onclick="Dialog.close('editCategoryModal')">✕</button>
+    </div>
+    <form id="editCatForm" onsubmit="event.preventDefault(); SettingsView.submitEditCategory();">
+      <input type="hidden" id="editCatId">
+      <div class="modal-body">
+        <div class="m3-field-group">
+          <label class="m3-label">分类名称</label>
+          <input type="text" id="editCatName" class="m3-input" required>
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">对应 Beancount 科目全路径</label>
+          <input type="text" id="editCatAccount" class="m3-input" readonly disabled style="opacity: 0.7;">
+        </div>
+        <div class="m3-field-group">
+          <label class="m3-label">Emoji 图标</label>
+          <input type="text" id="editCatIcon" class="m3-input" placeholder="例如: 🍔, 🚗, 🎮">
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+          <input type="checkbox" id="editCatArchived" style="width: 16px; height: 16px;">
+          <label for="editCatArchived" style="font-size: 13px; color: var(--md-sys-color-on-surface);">
+            归档此分类（在日常记账下拉中隐藏，不破坏历史账目）
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('editCategoryModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">保存变更</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 9. 合并分类弹窗 -->
+<div class="modal-scrim" id="mergeCategoryModal">
+  <div class="modal-dialog" style="max-width: 520px;">
+    <div class="modal-header">
+      <div class="modal-title">🔀 合并记账分类</div>
+      <button class="modal-close-btn" onclick="Dialog.close('mergeCategoryModal')">✕</button>
+    </div>
+    <form id="mergeCatForm" onsubmit="event.preventDefault(); SettingsView.submitMergeCategory();">
+      <div class="modal-body">
+        <div style="background: var(--md-sys-color-surface-container); padding: 12px; border-radius: var(--md-shape-sm); font-size: 13px; line-height: 1.5; color: var(--md-sys-color-on-surface-variant); margin-bottom: 16px;">
+          💡 <b>分类合并说明</b>：系统将扫描 Beancount 账本，自动将<b>源分类</b>下的所有历史记账分录平滑重定向迁移至<b>目标分类</b>，并在合并完成后自动清理源分类，保持复式账本 100% 借贷平衡。
+        </div>
+        <div class="m3-field-group" style="margin-bottom: 12px;">
+          <label class="m3-label">原分类 (将被合并清空的源分类)</label>
+          <select id="mergeSrcCategory" class="m3-select" required></select>
+        </div>
+        <div class="m3-field-group" style="margin-bottom: 16px;">
+          <label class="m3-label">目标分类 (合并并入的保留分类)</label>
+          <select id="mergeTgtCategory" class="m3-select" required></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="m3-btn btn-text" onclick="Dialog.close('mergeCategoryModal')">取消</button>
+        <button type="submit" class="m3-btn btn-filled">确认合并并迁移流水</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ====================================================================
+     Toast / Snackbar Container
+     ==================================================================== -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ====================================================================
+     Modular JavaScript Architecture
+     ==================================================================== -->
+<script src="/js/api.js"></script>
+<script src="/js/state.js"></script>
+<script src="/js/theme.js"></script>
+<script src="/js/components/toast.js"></script>
+<script src="/js/components/dialog.js"></script>
+<script src="/js/components/charts.js"></script>
+<script src="/js/views/transactions.js"></script>
+<script src="/js/views/accounts.js"></script>
+<script src="/js/views/analytics.js"></script>
+<script src="/js/views/settings.js"></script>
+<script src="/js/app.js"></script>
+
+</body>
+</html>

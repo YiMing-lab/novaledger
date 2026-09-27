@@ -1,0 +1,676 @@
+/* ==========================================================================
+   Material Design 3 (M3) Component Library
+   Buttons, Cards, Inputs, Tables, Chips, Badges, Tabs, Snackbars
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Buttons (Filled, Tonal, Outlined, Text, Danger)
+   -------------------------------------------------------------------------- */
+.m3-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--md-shape-full);
+  font: var(--md-sys-typescale-label-large);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+  white-space: nowrap;
+}
+
+.m3-btn:active {
+  transform: scale(0.98);
+}
+
+.m3-btn.btn-sm {
+  height: 32px;
+  padding: 0 12px;
+  font: var(--md-sys-typescale-label-medium);
+}
+
+/* Filled Button (High Emphasis) */
+.btn-filled {
+  background-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-elevation-level1);
+}
+.btn-filled:hover {
+  box-shadow: var(--md-elevation-level2);
+  filter: brightness(1.05);
+}
+
+/* Tonal Button (Medium Emphasis) */
+.btn-tonal {
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+.btn-tonal:hover {
+  background-color: var(--md-sys-color-surface-container-highest);
+  box-shadow: var(--md-elevation-level1);
+}
+
+/* Outlined Button (Medium Emphasis) */
+.btn-outlined {
+  background-color: transparent;
+  color: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-outline);
+}
+.btn-outlined:hover {
+  background-color: var(--md-sys-color-surface-container-high);
+  border-color: var(--md-sys-color-primary);
+}
+
+/* Text Button (Low Emphasis) */
+.btn-text {
+  background-color: transparent;
+  color: var(--md-sys-color-primary);
+  padding: 0 12px;
+}
+.btn-text:hover {
+  background-color: var(--md-sys-color-surface-container-high);
+}
+
+/* Danger / Error Button */
+.btn-danger {
+  background-color: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+.btn-danger:hover {
+  background-color: var(--md-sys-color-error);
+  color: var(--md-sys-color-on-error);
+}
+
+/* --------------------------------------------------------------------------
+   Cards & Surfaces
+   -------------------------------------------------------------------------- */
+.m3-card {
+  background-color: var(--md-sys-color-surface-container-low);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-shape-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+}
+
+.m3-card.elevated {
+  box-shadow: var(--md-elevation-level1);
+}
+.m3-card.elevated:hover {
+  box-shadow: var(--md-elevation-level2);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font: var(--md-sys-typescale-title-medium);
+  color: var(--md-sys-color-on-surface);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-subtitle {
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+  margin-top: 2px;
+}
+
+/* Financial Metric Stat Cards */
+.metric-card {
+  background: var(--md-sys-color-surface-container-lowest);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-shape-lg);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background-color: var(--md-sys-color-primary);
+}
+
+.metric-card.success::before { background-color: var(--md-sys-color-success); }
+.metric-card.warning::before { background-color: var(--md-sys-color-warning); }
+.metric-card.danger::before { background-color: var(--md-sys-color-error); }
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metric-label {
+  font: var(--md-sys-typescale-label-medium);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.metric-icon {
+  font-size: 20px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.metric-value {
+  font: var(--md-sys-typescale-headline-medium);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-typescale-font-family-code);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.metric-subtext {
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+/* --------------------------------------------------------------------------
+   M3 Text Fields & Selects
+   -------------------------------------------------------------------------- */
+.m3-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.m3-label {
+  font: var(--md-sys-typescale-label-medium);
+  color: var(--md-sys-color-on-surface);
+  font-weight: 600;
+}
+
+.m3-input, .m3-select, .m3-textarea {
+  height: 44px;
+  padding: 0 14px;
+  background-color: var(--md-sys-color-surface-container-lowest);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-shape-sm);
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-body-large);
+  outline: none;
+  transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+  width: 100%;
+}
+
+.m3-textarea {
+  height: 80px;
+  padding: 10px 14px;
+  resize: vertical;
+}
+
+.m3-input:focus, .m3-select:focus, .m3-textarea:focus {
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 2px var(--md-sys-color-primary-container);
+}
+
+.m3-input.compact {
+  height: 36px;
+  padding: 0 10px;
+  font: var(--md-sys-typescale-body-medium);
+}
+
+.input-with-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* --------------------------------------------------------------------------
+   Chips & Badges
+   -------------------------------------------------------------------------- */
+.m3-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--md-shape-sm);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background-color: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-medium);
+  cursor: pointer;
+  transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+  user-select: none;
+}
+
+.m3-chip:hover {
+  background-color: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+}
+
+.m3-chip.active {
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* Badges */
+.m3-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.badge-expense { background-color: #fee2e2; color: #991b1b; }
+.badge-expense-offset { background-color: #ccfbf1; color: #0f766e; }
+.badge-income { background-color: #dcfce7; color: #166534; }
+.badge-income-offset { background-color: #ffedd5; color: #c2410c; }
+.badge-transfer { background-color: #e0e7ff; color: #3730a3; }
+.badge-debt { background-color: #fef3c7; color: #92400e; }
+.badge-archived { background-color: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface-variant); }
+
+[data-theme="dark"] .badge-expense { background-color: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.35); }
+[data-theme="dark"] .badge-expense-offset { background-color: rgba(20, 184, 166, 0.2); color: #5eead4; border: 1px solid rgba(20, 184, 166, 0.35); }
+[data-theme="dark"] .badge-income { background-color: rgba(34, 197, 94, 0.2); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.35); }
+[data-theme="dark"] .badge-income-offset { background-color: rgba(249, 115, 22, 0.2); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.35); }
+[data-theme="dark"] .badge-transfer { background-color: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.35); }
+[data-theme="dark"] .badge-debt { background-color: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.35); }
+
+/* --------------------------------------------------------------------------
+   M3 Data Tables (Compact Desktop Layout)
+   -------------------------------------------------------------------------- */
+.m3-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-shape-md);
+  background-color: var(--md-sys-color-surface-container-lowest);
+}
+
+.m3-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.m3-table th {
+  background-color: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.m3-table td {
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--md-sys-color-on-surface);
+  border-bottom: 1px solid var(--md-sys-color-surface-container);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.m3-table tbody tr {
+  height: 38px;
+  transition: background-color var(--md-motion-duration-short) ease;
+}
+
+.m3-table tbody tr:hover {
+  background-color: var(--md-sys-color-surface-container-high);
+}
+
+/* 流水表格专用紧凑与单行单元格 */
+.m3-table td.cell-date {
+  font-family: var(--md-sys-typescale-font-family-code);
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.m3-table td.cell-type {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.m3-table td.cell-payee {
+  font-weight: 500;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m3-table td.cell-narration {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m3-table td.cell-category {
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3-tag-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3-table td.cell-account {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3-table td.cell-amount {
+  font-family: var(--md-sys-typescale-font-family-code);
+  font-weight: 600;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.m3-table td.cell-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.m3-btn.btn-xs {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  min-width: unset;
+  line-height: 24px;
+}
+
+.m3-btn.btn-text.btn-xs {
+  padding: 0 6px;
+}
+
+.m3-btn.danger-text {
+  color: var(--md-sys-color-error);
+}
+
+.m3-btn.danger-text:hover {
+  background-color: rgba(186, 26, 26, 0.1);
+}
+
+.amount-display {
+  font-family: var(--md-sys-typescale-font-family-code);
+  font-weight: 600;
+}
+.amount-expense { color: var(--md-sys-color-error); }
+.amount-income { color: var(--md-sys-color-success); }
+.amount-transfer { color: var(--md-sys-color-primary); }
+
+/* --------------------------------------------------------------------------
+   Sub-Tabs Navigation (Within Views)
+   -------------------------------------------------------------------------- */
+.m3-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  margin-bottom: 20px;
+  padding-bottom: 2px;
+}
+
+.m3-tab-btn {
+  height: 40px;
+  padding: 0 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-title-small);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+}
+
+.m3-tab-btn:hover {
+  color: var(--md-sys-color-on-surface);
+  background-color: var(--md-sys-color-surface-container-high);
+  border-radius: var(--md-shape-sm) var(--md-shape-sm) 0 0;
+}
+
+.m3-tab-btn.active {
+  color: var(--md-sys-color-primary);
+  border-bottom-color: var(--md-sys-color-primary);
+}
+
+/* --------------------------------------------------------------------------
+   Linear Progress Bar
+   -------------------------------------------------------------------------- */
+.m3-linear-progress {
+  width: 100%;
+  height: 6px;
+  background-color: var(--md-sys-color-surface-container-highest);
+  border-radius: var(--md-shape-full);
+  overflow: hidden;
+  position: relative;
+}
+
+.m3-linear-progress .bar {
+  height: 100%;
+  background-color: var(--md-sys-color-primary);
+  border-radius: var(--md-shape-full);
+  transition: width var(--md-motion-duration-medium) var(--md-motion-easing-emphasized);
+}
+
+/* --------------------------------------------------------------------------
+   M3 Snackbar / Toast Notification
+   -------------------------------------------------------------------------- */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2000;
+}
+
+.m3-snackbar {
+  min-width: 280px;
+  max-width: 460px;
+  background-color: var(--md-sys-color-inverse-surface);
+  color: var(--md-sys-color-inverse-on-surface);
+  padding: 12px 18px;
+  border-radius: var(--md-shape-sm);
+  box-shadow: var(--md-elevation-level3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: var(--md-sys-typescale-body-medium);
+  animation: toastSlideUp var(--md-motion-duration-short) var(--md-motion-easing-emphasized);
+}
+
+.m3-snackbar.success { border-left: 4px solid var(--md-sys-color-success); }
+.m3-snackbar.error { border-left: 4px solid var(--md-sys-color-error); }
+.m3-snackbar.warning { border-left: 4px solid var(--md-sys-color-warning); }
+
+@keyframes toastSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --------------------------------------------------------------------------
+   Category Drilldown & Analytics Components
+   -------------------------------------------------------------------------- */
+.drilldown-row > td {
+  padding: 0 !important;
+  background-color: var(--md-sys-color-surface-container-low);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.drilldown-container {
+  padding: 10px 16px 14px 44px;
+  animation: fadeIn 200ms ease;
+}
+
+.drilldown-arrow {
+  display: inline-block;
+  font-size: 10px;
+  margin-right: 6px;
+  transition: transform 200ms ease;
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+}
+
+.drilldown-arrow.expanded {
+  transform: rotate(90deg);
+  color: var(--md-sys-color-primary);
+}
+
+.drilldown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.drilldown-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface-variant);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  text-align: left;
+}
+
+.drilldown-table td {
+  padding: 6px 8px;
+  border-bottom: 1px dashed var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface);
+}
+
+.drilldown-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* --------------------------------------------------------------------------
+   Segmented Controls & Filter Chips for Analytics
+   -------------------------------------------------------------------------- */
+.segmented-group {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--md-sys-color-surface-container);
+  border-radius: var(--md-shape-full);
+  padding: 3px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  gap: 2px;
+}
+
+.segmented-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  border-radius: var(--md-shape-full);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+
+.segmented-btn:hover {
+  color: var(--md-sys-color-on-surface);
+}
+
+.segmented-btn.active {
+  background-color: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-primary);
+  font-weight: 600;
+  box-shadow: var(--md-elevation-level1);
+}
+
+.asset-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--md-shape-full);
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  transition: all 150ms ease;
+  user-select: none;
+}
+
+.asset-chip:hover {
+  background-color: var(--md-sys-color-surface-container-high);
+}
+
+.asset-chip.active {
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  border-color: var(--md-sys-color-primary);
+  font-weight: 600;
+}
+
+.asset-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
