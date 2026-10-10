@@ -31,6 +31,31 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Scaffold Official Android Platform Files
+        working-directory: novaledger_mobile
+        run: |
+          rm -rf android
+          flutter create . --platforms=android --org=com.novaledger --project-name=novaledger_mobile
+
+      - name: Configure Android Permissions & App Label
+        working-directory: novaledger_mobile
+        run: |
+          python3 -c "
+          manifest_path = 'android/app/src/main/AndroidManifest.xml'
+          with open(manifest_path, 'r', encoding='utf-8') as f:
+              content = f.read()
+          perms = '''
+              <uses-permission android:name=\"android.permission.INTERNET\" />
+              <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />
+              <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" />
+          '''
+          content = content.replace('<application', perms + '    <application')
+          content = content.replace('android:label=\"novaledger_mobile\"', 'android:label=\"星芒账本\"')
+          with open(manifest_path, 'w', encoding='utf-8') as f:
+              f.write(content)
+          print('Successfully patched AndroidManifest.xml')
+          "
+
       - name: Install Dependencies
         working-directory: novaledger_mobile
         run: |
