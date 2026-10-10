@@ -52,3 +52,4 @@ Thumbs.db
 .flutter-plugins-dependencies
 novaledger_mobile/build/
 novaledger_mobile/.dart_tool/
+dist_apk/
