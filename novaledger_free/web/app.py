@@ -230,20 +230,19 @@ def create_app(data_dir: Optional[Path | str] = None) -> FastAPI:
     @app.post("/api/accounts")
     def create_account(req: AccountCreateRequest):
         acc_id = (req.id or "").strip() or f"acc_{int(datetime.now().timestamp() * 1000)}"
+        raw_account = (req.account or "").strip()
         sub = (req.sub_name or "").strip()
-        if not sub and req.account:
-            parts = [p for p in req.account.strip().split(":") if p]
-            sub = parts[-1] if len(parts) >= 3 else req.account.strip()
-        if not sub:
+        if not sub and not raw_account:
             sub = f"Card{req.card_tail.strip()}" if (req.card_tail and req.card_tail.strip()) else f"Acc{int(datetime.now().timestamp()) % 10000}"
 
         ok, msg, bean_acc = acc_mgr.create_account(
             account_id=acc_id,
             name=req.name,
             acc_type=req.type,
-            sub_name=sub,
+            sub_name=sub if sub else None,
             initial_balance=req.initial_balance,
-            opening_date=req.opening_date or "2020-01-01"
+            opening_date=req.opening_date or "2020-01-01",
+            account=raw_account if raw_account else None
         )
         if not ok:
             raise HTTPException(status_code=400, detail=msg)
@@ -255,6 +254,7 @@ def create_app(data_dir: Optional[Path | str] = None) -> FastAPI:
         name: Optional[str] = None
         card_tail: Optional[str] = None
         type: Optional[str] = None
+        account: Optional[str] = None
         is_archived: Optional[bool] = None
 
     @app.put("/api/accounts/{account_id}")
@@ -264,7 +264,8 @@ def create_app(data_dir: Optional[Path | str] = None) -> FastAPI:
             name=req.name,
             card_tail=req.card_tail,
             acc_type=req.type,
-            is_archived=req.is_archived
+            is_archived=req.is_archived,
+            account=req.account
         )
         if not ok:
             raise HTTPException(status_code=400, detail=msg)

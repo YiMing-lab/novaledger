@@ -284,7 +284,7 @@ const NovaLedgerShell: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold tracking-tight text-base">NovaLedger</span>
                   <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4">
-                    v2.0.1
+                    v2.0.2
                   </Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground">个人记账与资产管理</p>

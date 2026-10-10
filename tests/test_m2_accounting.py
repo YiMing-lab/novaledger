@@ -143,6 +143,43 @@ class TestM2Accounting(unittest.TestCase):
         self.assertEqual(chk_after["difference"], 0.0)
         self.assertEqual(chk_after["ledger_balance"], 520.0)
 
+    def test_06_account_custom_path_and_type_inference(self):
+        """测试指定完整科目路径时银行层级不被截断、信用卡负债分类与期初欠款正确核算"""
+        # 1. 创建多层级银行卡 Assets:Bank:ICBC:Card1234
+        ok1, msg1, bean1 = self.acc_mgr.create_account(
+            account_id="icbc_debit",
+            name="工行工资卡",
+            acc_type="debit",
+            account="Assets:Bank:ICBC:Card1234",
+            initial_balance=888.0,
+            opening_date="2026-01-01"
+        )
+        self.assertTrue(ok1, msg1)
+        self.assertEqual(bean1, "Assets:Bank:ICBC:Card1234")
+        acc1 = self.acc_mgr.get_account_by_id("icbc_debit")
+        self.assertEqual(acc1["account"], "Assets:Bank:ICBC:Card1234")
+        self.assertEqual(acc1["type"], "debit")
+
+        # 2. 创建信用卡 Liabilities:CreditCard:CMB:Card8888 (带期初欠款 200 元)
+        ok2, msg2, bean2 = self.acc_mgr.create_account(
+            account_id="cmb_credit_custom",
+            name="招行信用卡",
+            acc_type="credit",
+            account="Liabilities:CreditCard:CMB:Card8888",
+            initial_balance=200.0,
+            opening_date="2026-01-01"
+        )
+        self.assertTrue(ok2, msg2)
+        self.assertEqual(bean2, "Liabilities:CreditCard:CMB:Card8888")
+        acc2 = self.acc_mgr.get_account_by_id("cmb_credit_custom")
+        self.assertEqual(acc2["account"], "Liabilities:CreditCard:CMB:Card8888")
+        self.assertEqual(acc2["type"], "credit")
+
+        # 检查信用卡期初欠款在资产负债表中记为负债 200，在账户余额中为 -200
+        bals = self.ledger.get_balances()
+        self.assertEqual(bals["account_balances"]["Liabilities:CreditCard:CMB:Card8888"], -200.0)
+        self.assertEqual(bals["total_liabilities"], 200.0)
+
 
 if __name__ == "__main__":
     unittest.main()

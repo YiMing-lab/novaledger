@@ -30,6 +30,73 @@ import {
   Banknote,
 } from "lucide-react";
 
+const BANK_CODES: Record<string, string> = {
+  "招商": "CMB",
+  "招行": "CMB",
+  "工商": "ICBC",
+  "工行": "ICBC",
+  "建设": "CCB",
+  "建行": "CCB",
+  "农业": "ABC",
+  "农行": "ABC",
+  "中国银行": "BOC",
+  "中行": "BOC",
+  "交通": "BOCOM",
+  "交行": "BOCOM",
+  "浦发": "SPDB",
+  "民生": "CMBC",
+  "平安": "PAB",
+  "广发": "CGB",
+  "中信": "CITIC",
+  "光大": "CEB",
+  "兴业": "CIB",
+  "华夏": "HXB",
+  "邮储": "PSBC",
+  "邮政": "PSBC",
+  "微信": "WeChat",
+  "支付宝": "Alipay",
+  "现金": "CNY",
+  "京东": "JD",
+};
+
+export const generateDefaultAccountPath = (type: string, name: string, tail: string): string => {
+  const cleanTail = (tail || "").trim();
+  const tailSuffix = cleanTail ? `Card${cleanTail}` : "Card001";
+
+  let detectedBank = "";
+  for (const [key, code] of Object.entries(BANK_CODES)) {
+    if (name.includes(key)) {
+      detectedBank = code;
+      break;
+    }
+  }
+
+  switch (type) {
+    case "credit": {
+      const bank = detectedBank || "CMB";
+      return `Liabilities:CreditCard:${bank}:${tailSuffix}`;
+    }
+    case "e_wallet": {
+      if (name.includes("支付宝")) return "Assets:EWallet:Alipay";
+      if (name.includes("微信")) return "Assets:EWallet:WeChat";
+      if (detectedBank) return `Assets:EWallet:${detectedBank}`;
+      return "Assets:EWallet:Wallet";
+    }
+    case "cash": {
+      return "Assets:Cash:CNY";
+    }
+    case "invest": {
+      const bank = detectedBank || "Broker";
+      return `Assets:Invest:${bank}`;
+    }
+    case "debit":
+    default: {
+      const bank = detectedBank || "CMB";
+      return `Assets:Bank:${bank}:${tailSuffix}`;
+    }
+  }
+};
+
 interface AccountsViewProps {
   accounts: AccountItem[];
   debts: DebtItem[];
@@ -65,6 +132,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const [accName, setAccName] = useState("");
   const [accType, setAccType] = useState("debit");
   const [accCode, setAccCode] = useState("");
+  const [accCodeCustomized, setAccCodeCustomized] = useState(false);
   const [accCardTail, setAccCardTail] = useState("");
   const [accInitBal, setAccInitBal] = useState("0");
   const [accArchived, setAccArchived] = useState(false);
@@ -86,8 +154,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     setEditingAcc(null);
     setAccName("");
     setAccType("debit");
-    setAccCode("Assets:Bank:CMB:Card001");
     setAccCardTail("");
+    setAccCodeCustomized(false);
+    setAccCode(generateDefaultAccountPath("debit", "", ""));
     setAccInitBal("0");
     setAccArchived(false);
     setAccModalOpen(true);
@@ -98,10 +167,42 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     setAccName(acc.name);
     setAccType(acc.type || "debit");
     setAccCode(acc.account);
+    setAccCodeCustomized(true);
     setAccCardTail(acc.card_tail || "");
     setAccInitBal("0");
     setAccArchived(Boolean(acc.is_archived));
     setAccModalOpen(true);
+  };
+
+  const handleAccNameChange = (val: string) => {
+    setAccName(val);
+    if (!editingAcc && !accCodeCustomized) {
+      setAccCode(generateDefaultAccountPath(accType, val, accCardTail));
+    }
+  };
+
+  const handleAccTypeChange = (val: string) => {
+    setAccType(val);
+    if (!editingAcc && !accCodeCustomized) {
+      setAccCode(generateDefaultAccountPath(val, accName, accCardTail));
+    }
+  };
+
+  const handleAccTailChange = (val: string) => {
+    setAccCardTail(val);
+    if (!editingAcc && !accCodeCustomized) {
+      setAccCode(generateDefaultAccountPath(accType, accName, val));
+    }
+  };
+
+  const handleAccCodeChange = (val: string) => {
+    setAccCode(val);
+    setAccCodeCustomized(true);
+  };
+
+  const handleResetAccCode = () => {
+    setAccCodeCustomized(false);
+    setAccCode(generateDefaultAccountPath(accType, accName, accCardTail));
   };
 
   const handleSaveAccount = async (e: React.FormEvent) => {
@@ -110,11 +211,31 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
       toast.error("请输入账户名称");
       return;
     }
+    const cleanCode = accCode.trim();
+    if (!cleanCode) {
+      toast.error("请输入 Beancount 会计科目路径");
+      return;
+    }
+    if (!/^(Assets|Liabilities):[A-Za-z0-9\-_]+(:[A-Za-z0-9\-_]+)*$/.test(cleanCode)) {
+      toast.error("会计科目格式不符合 Beancount 规范 (例如: Assets:Bank:CMB:Card8888 或 Liabilities:CreditCard:CMB:Card8888)");
+      return;
+    }
+    if (accType === "credit" && !cleanCode.startsWith("Liabilities:")) {
+      toast.error("信用卡属于负债类科目，路径必须以 Liabilities: (推荐 Liabilities:CreditCard:) 开头");
+      return;
+    }
+    if (accType !== "credit" && cleanCode.startsWith("Liabilities:")) {
+      toast.error("储蓄卡/电子钱包/现金等属于资产类科目，路径必须以 Assets: 开头");
+      return;
+    }
+
     try {
       if (editingAcc) {
         await api.updateAccount(editingAcc.id, {
           name: accName.trim(),
           card_tail: accCardTail.trim(),
+          account: cleanCode,
+          type: accType,
           is_archived: accArchived,
         });
         toast.success("账户信息已更新！");
@@ -122,7 +243,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         await api.createAccount({
           name: accName.trim(),
           type: accType,
-          account: accCode.trim(),
+          account: cleanCode,
           card_tail: accCardTail.trim(),
           initial_balance: parseFloat(accInitBal || "0"),
         });
@@ -745,55 +866,76 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
           <div className="space-y-1.5">
             <Label>账户显示名称</Label>
             <Input
-              placeholder="例如: 招商银行工资卡"
+              placeholder={accType === "credit" ? "例如: 招商银行信用卡" : "例如: 招商银行工资卡"}
               value={accName}
-              onChange={(e) => setAccName(e.target.value)}
+              onChange={(e) => handleAccNameChange(e.target.value)}
               required
             />
           </div>
-          {!editingAcc && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>账户类型</Label>
-                  <Select value={accType} onChange={(e) => setAccType(e.target.value)}>
-                    <option value="debit">储蓄卡 / 借记卡</option>
-                    <option value="credit">信用卡</option>
-                    <option value="e_wallet">电子钱包 (微信/支付宝)</option>
-                    <option value="cash">现金钱包</option>
-                    <option value="invest">投资理财账户</option>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>期初余额 (¥)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={accInitBal}
-                    onChange={(e) => setAccInitBal(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Beancount 会计科目路径</Label>
-                <Input
-                  placeholder="例如: Assets:Bank:CMB:Card8888"
-                  value={accCode}
-                  onChange={(e) => setAccCode(e.target.value)}
-                  required
-                />
-              </div>
-            </>
-          )}
-          <div className="space-y-1.5">
-            <Label>银行卡 4 位尾号 (选填，用于邮件同步自动匹配账户)</Label>
-            <Input
-              placeholder="例如: 7861"
-              maxLength={4}
-              value={accCardTail}
-              onChange={(e) => setAccCardTail(e.target.value)}
-            />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>账户类型</Label>
+              <Select value={accType} onChange={(e) => handleAccTypeChange(e.target.value)}>
+                <option value="debit">储蓄卡 / 借记卡 (资产)</option>
+                <option value="credit">信用卡 (负债)</option>
+                <option value="e_wallet">电子钱包 (微信/支付宝)</option>
+                <option value="cash">现金钱包</option>
+                <option value="invest">投资理财账户</option>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>银行卡 4 位尾号 (选填)</Label>
+              <Input
+                placeholder="例如: 8225"
+                maxLength={4}
+                value={accCardTail}
+                onChange={(e) => handleAccTailChange(e.target.value)}
+              />
+            </div>
           </div>
+
+          {!editingAcc && (
+            <div className="space-y-1.5">
+              <Label>{accType === "credit" ? "期初已用额度/欠款 (¥)" : "期初可用余额 (¥)"}</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={accInitBal}
+                onChange={(e) => setAccInitBal(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Beancount 会计科目路径</Label>
+              {accCodeCustomized && !editingAcc && (
+                <button
+                  type="button"
+                  onClick={handleResetAccCode}
+                  className="text-[11px] text-primary hover:underline"
+                >
+                  重置为推荐规则
+                </button>
+              )}
+            </div>
+            <Input
+              placeholder={accType === "credit" ? "例如: Liabilities:CreditCard:CMB:Card8888" : "例如: Assets:Bank:CMB:Card8888"}
+              value={accCode}
+              onChange={(e) => handleAccCodeChange(e.target.value)}
+              required
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {accType === "credit" && "💡 信用卡归属于负债类科目 (Liabilities:CreditCard:...)，确保账单与还款准确核算"}
+              {accType === "debit" && "💡 储蓄卡/借记卡归属于资产类科目 (Assets:Bank:...)"}
+              {accType === "e_wallet" && "💡 微信/支付宝零钱归属于资产类科目 (Assets:EWallet:...)"}
+              {accType === "cash" && "💡 现金钱包归属于资产类科目 (Assets:Cash:...)"}
+              {accType === "invest" && "💡 投资理财账户归属于资产类科目 (Assets:Invest:...)"}
+            </p>
+          </div>
+
           {editingAcc && (
             <div className="space-y-1.5">
               <Label>账户状态</Label>

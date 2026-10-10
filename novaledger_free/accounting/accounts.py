@@ -56,23 +56,60 @@ class AccountManager:
         account_id: str,
         name: str,
         acc_type: str,
-        sub_name: str,
+        sub_name: Optional[str] = None,
         currency: str = "CNY",
         initial_balance: Optional[Decimal | float | str] = None,
-        opening_date: str = "2020-01-01"
+        opening_date: str = "2020-01-01",
+        account: Optional[str] = None
     ) -> Tuple[bool, str, Optional[str]]:
         """
-        根据中文业务类型创建账户并自动在 accounts.bean 中开户；
+        根据中文业务类型或指定 Beancount 科目创建账户并自动在 accounts.bean 中开户；
         若有期初余额，自动在 transactions.bean 中生成 Equity:Opening-Balances 平账分录。
         """
-        if acc_type not in ACCOUNT_TYPE_MAP:
-            return False, f"不支持的账户类型: {acc_type}", None
+        raw_account = (account or "").strip()
+        if raw_account:
+            parts = [p.strip() for p in raw_account.split(":") if p.strip()]
+            if len(parts) < 2 or parts[0] not in ("Assets", "Liabilities", "Equity", "Income", "Expenses"):
+                return False, f"无效的 Beancount 会计科目路径: '{raw_account}' (必须以 Assets: 或 Liabilities: 等标准根科目开头)", None
+            beancount_account = ":".join(parts)
 
-        prefix = ACCOUNT_TYPE_MAP[acc_type][1]
-        clean_sub = "".join(c for c in sub_name if c.isalnum() or c in "-_")
-        if not clean_sub:
-            clean_sub = "Acc001"
-        beancount_account = f"{prefix}:{clean_sub}"
+            # 根据科目自动校正账户分类 (确保信用卡正确归入 Liabilities, 资金卡归入 Assets)
+            if beancount_account.startswith("Liabilities:CreditCard"):
+                acc_type = "credit"
+            elif beancount_account.startswith("Liabilities:Loan"):
+                acc_type = "loan"
+            elif beancount_account.startswith("Liabilities:"):
+                if acc_type not in ("credit", "loan", "payable"):
+                    acc_type = "payable"
+            elif beancount_account.startswith("Assets:Bank"):
+                acc_type = "debit"
+            elif beancount_account.startswith("Assets:EWallet"):
+                acc_type = "e_wallet"
+            elif beancount_account.startswith("Assets:Cash"):
+                acc_type = "cash"
+            elif beancount_account.startswith("Assets:Invest"):
+                acc_type = "invest"
+            elif beancount_account.startswith("Assets:Receivable"):
+                acc_type = "receivable"
+            elif beancount_account.startswith("Assets:"):
+                if acc_type not in ("debit", "cash", "e_wallet", "invest", "receivable"):
+                    acc_type = "debit"
+        else:
+            if acc_type not in ACCOUNT_TYPE_MAP:
+                return False, f"不支持的账户类型: {acc_type}", None
+
+            prefix = ACCOUNT_TYPE_MAP[acc_type][1]
+            sub_raw = (sub_name or "").strip()
+            # 允许字母数字、横杠、下划线及冒号 (支持如 CMB:Card8888 结构)
+            clean_sub = "".join(c for c in sub_raw if c.isalnum() or c in "-_:")
+            clean_sub = ":".join(p for p in clean_sub.split(":") if p)
+            if not clean_sub:
+                clean_sub = "Card001" if acc_type in ("debit", "credit") else "Acc001"
+
+            if clean_sub.startswith(f"{prefix}:"):
+                beancount_account = clean_sub
+            else:
+                beancount_account = f"{prefix}:{clean_sub}"
 
         # 检查是否已存在
         for a in self.config_mgr.config.get("accounts", []):
@@ -101,8 +138,8 @@ class AccountManager:
         if initial_balance is not None:
             init_dec = to_decimal(initial_balance)
             if init_dec != Decimal("0.00"):
-                if acc_type == "credit" or acc_type == "loan":
-                    # 信用卡/贷款期初欠款在 Beancount 中负债为负数
+                if acc_type in ("credit", "loan") or beancount_account.startswith("Liabilities:"):
+                    # 信用卡/贷款/负债期初欠款在 Beancount 中负债为负数
                     postings = [
                         (beancount_account, -abs(init_dec), currency),
                         ("Equity:Opening-Balances", abs(init_dec), currency)
@@ -154,9 +191,10 @@ class AccountManager:
         name: Optional[str] = None,
         card_tail: Optional[str] = None,
         acc_type: Optional[str] = None,
-        is_archived: Optional[bool] = None
+        is_archived: Optional[bool] = None,
+        account: Optional[str] = None
     ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-        """更新账户的中文名称、卡号尾号、账户类型或归档状态"""
+        """更新账户的中文名称、卡号尾号、账户类型、科目路径或归档状态"""
         accounts = self.config_mgr.config.get("accounts", [])
         target = None
         for a in accounts:
@@ -176,6 +214,20 @@ class AccountManager:
                 target["type"] = acc_type.strip()
         if is_archived is not None:
             target["is_archived"] = bool(is_archived)
+
+        if account is not None and account.strip():
+            new_acc = account.strip()
+            if new_acc != target.get("account"):
+                # 校验是否已被其他账户占用
+                for a in accounts:
+                    if a["id"] != account_id and a.get("account") == new_acc:
+                        return False, f"科目 '{new_acc}' 已被其他账户占用", None
+                target["account"] = new_acc
+                # 确保写入 accounts.bean
+                open_line = f"2020-01-01 open {new_acc} CNY\n"
+                current_acc_text = self.config_mgr.accounts_bean.read_text(encoding="utf-8")
+                if new_acc not in current_acc_text:
+                    self.config_mgr.accounts_bean.write_text(current_acc_text.rstrip() + "\n" + open_line, encoding="utf-8")
 
         self.config_mgr.save_config()
         return True, "账户信息更新成功", target
