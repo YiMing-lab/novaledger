@@ -37,7 +37,7 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --org=com.novaledger --project-name=novaledger_mobile
 
-      - name: Configure Android Permissions & App Label
+      - name: Configure Android Permissions & App Settings
         working-directory: novaledger_mobile
         run: |
           python3 -c "
@@ -53,13 +53,28 @@ jobs:
           content = content.replace('android:label=\"novaledger_mobile\"', 'android:label=\"星芒账本\"')
           with open(manifest_path, 'w', encoding='utf-8') as f:
               f.write(content)
-          print('Successfully patched AndroidManifest.xml')
+          print('Successfully configured AndroidManifest.xml')
+
+          # Ensure minSdk is at least 21 in build.gradle
+          gradle_path = 'android/app/build.gradle'
+          with open(gradle_path, 'r', encoding='utf-8') as f:
+              gc = f.read()
+          gc = gc.replace('minSdk = flutter.minSdkVersion', 'minSdk = 21')
+          gc = gc.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
+          with open(gradle_path, 'w', encoding='utf-8') as f:
+              f.write(gc)
+          print('Successfully patched android/app/build.gradle')
           "
 
       - name: Install Dependencies
         working-directory: novaledger_mobile
         run: |
           flutter pub get
+
+      - name: Verify & Analyze Dart Code
+        working-directory: novaledger_mobile
+        run: |
+          flutter analyze
 
       - name: Build Android APK
         working-directory: novaledger_mobile

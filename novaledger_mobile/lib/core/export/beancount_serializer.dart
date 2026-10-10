@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,7 +13,7 @@ class BeancountSerializer {
     final tempDir = await getTemporaryDirectory();
     final dateStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final exportFile = File('${tempDir.path}/NovaLedger_Export_$dateStr.bean');
-    await exportFile.writeAsString(beancountContent, encoding: const Utf8Codec());
+    await exportFile.writeAsString(beancountContent, encoding: utf8);
 
     // 调起系统原生分享面板 (微信、QQ、网盘、保存到文件)
     await Share.shareXFiles(
