@@ -384,6 +384,13 @@ class ApiClient {
     this.triggerBlobDownload(blob, `novaledger_transactions_${nowStr}.csv`);
   }
 
+  async exportMobilePackage() {
+    const blob = await this.request<Blob>("/api/backup/export_mobile");
+    const nowStr = new Date().toISOString().slice(0, 19).replace(/[^0-9]/g, "");
+    this.triggerBlobDownload(blob, `NovaLedger_v201_Migration_${nowStr}.nlmobile`);
+  }
+
+
   async importBackup(file: File) {
     const formData = new FormData();
     formData.append("file", file);

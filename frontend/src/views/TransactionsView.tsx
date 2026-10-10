@@ -4,6 +4,7 @@ import {
   CategoryItem,
   DebtItem,
   FinancialReport,
+  PendingItem,
   TransactionItem,
 } from "../api/types";
 import { api } from "../api/client";
@@ -32,6 +33,8 @@ import {
   Sparkles,
 } from "lucide-react";
 
+export type GroupByMode = "none" | "date" | "month" | "type" | "category" | "account" | "source";
+
 interface TransactionsViewProps {
   transactions: TransactionItem[];
   accounts: AccountItem[];
@@ -42,6 +45,11 @@ interface TransactionsViewProps {
   onMonthChange: (m: string) => void;
   onOpenRecord: (tx?: TransactionItem | null) => void;
   onRefresh: () => void;
+  newTxIds?: Set<string>;
+  onDismissNewDot?: (id: string) => void;
+  onDismissAllNewDots?: () => void;
+  pendingItems?: PendingItem[];
+  onNavigateToPending?: () => void;
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
@@ -54,12 +62,19 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onMonthChange,
   onOpenRecord,
   onRefresh,
+  newTxIds,
+  onDismissNewDot,
+  onDismissAllNewDots,
+  pendingItems = [],
+  onNavigateToPending,
 }) => {
   const toast = useToast();
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [groupBy, setGroupBy] = useState<GroupByMode>("none");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [drawerTx, setDrawerTx] = useState<TransactionItem | null>(null);
   const [updatingRowId, setUpdatingRowId] = useState<string | null>(null);
 
@@ -286,6 +301,144 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [transactions, selectedMonth, typeFilter, accountFilter, categoryFilter, searchQuery, nameMap]);
 
+  const totalNewInView = useMemo(
+    () => filteredTxs.filter((t) => newTxIds?.has(t.id)).length,
+    [filteredTxs, newTxIds]
+  );
+
+  const WEEKDAY_NAMES = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+  const groupedData = useMemo(() => {
+    if (groupBy === "none") return [];
+
+    const groupMap = new Map<string, { title: string; items: TransactionItem[] }>();
+
+    filteredTxs.forEach((tx) => {
+      let key = "";
+      let title = "";
+      const normType = getNormalizedTxType(tx);
+
+      if (groupBy === "date") {
+        key = tx.date || "未知日期";
+        const [y, m, d] = (tx.date || "").split("-").map(Number);
+        let daySuffix = "";
+        if (y && m && d) {
+          const dateObj = new Date(y, m - 1, d);
+          if (!isNaN(dateObj.getTime())) {
+            daySuffix = ` · ${WEEKDAY_NAMES[dateObj.getDay()]}`;
+          }
+        }
+        title = `📅 ${key}${daySuffix}`;
+      } else if (groupBy === "month") {
+        key = tx.date ? tx.date.slice(0, 7) : "未知月份";
+        title = `🗓️ ${key}`;
+      } else if (groupBy === "type") {
+        if (tx.is_offset) {
+          key = "offset";
+          title = "↩️ 退款抵扣";
+        } else if (normType === "expense") {
+          key = "expense";
+          title = "🛒 支出";
+        } else if (normType === "income") {
+          key = "income";
+          title = "💰 收入";
+        } else {
+          key = "transfer";
+          title = "🔄 内部转账与还款";
+        }
+      } else if (groupBy === "category") {
+        key = tx.category || "Expenses:Other:General";
+        const catName = nameMap[tx.category] || tx.category || "未分类";
+        title = `📂 ${catName}`;
+      } else if (groupBy === "account") {
+        key = tx.account || "Assets:Bank:Default";
+        const accName = nameMap[tx.account] || tx.account || "未指定账户";
+        title = `💳 ${accName}`;
+      } else if (groupBy === "source") {
+        const src = tx.source_type || "manual";
+        key = src;
+        const sourceMap: Record<string, string> = {
+          bank_email: "✉️ 邮箱动账同步",
+          wechat_csv: "💬 微信支付账单",
+          alipay_csv: "💳 支付宝账单",
+          manual: "✍️ 手动快速记账",
+          generic_csv: "📄 通用表格导入",
+        };
+        title = sourceMap[src] || `📥 来源: ${src}`;
+      }
+
+      if (!groupMap.has(key)) {
+        groupMap.set(key, { title, items: [] });
+      }
+      groupMap.get(key)!.items.push(tx);
+    });
+
+    const result: Array<{
+      key: string;
+      title: string;
+      items: TransactionItem[];
+      newCount: number;
+      subtotalText: string;
+    }> = [];
+
+    groupMap.forEach(({ title, items }, key) => {
+      let expenseSum = 0;
+      let incomeSum = 0;
+      let transferSum = 0;
+      let offsetSum = 0;
+      let newCount = 0;
+
+      items.forEach((t) => {
+        if (newTxIds?.has(t.id)) newCount += 1;
+        const nType = getNormalizedTxType(t);
+        const amt = Number(t.amount || 0);
+        if (t.is_offset) {
+          offsetSum += amt;
+        } else if (nType === "expense") {
+          expenseSum += amt;
+        } else if (nType === "income") {
+          incomeSum += amt;
+        } else if (nType === "transfer") {
+          transferSum += amt;
+        }
+      });
+
+      const parts: string[] = [];
+      if (expenseSum > 0) parts.push(`支出 -${formatCurrency(expenseSum)}`);
+      if (incomeSum > 0) parts.push(`收入 +${formatCurrency(incomeSum)}`);
+      if (offsetSum > 0) parts.push(`退款 +${formatCurrency(offsetSum)}`);
+      if (transferSum > 0 && parts.length === 0) parts.push(`转账 ${formatCurrency(transferSum)}`);
+
+      result.push({
+        key,
+        title,
+        items,
+        newCount,
+        subtotalText: parts.length > 0 ? parts.join(" · ") : `共 ${items.length} 笔`,
+      });
+    });
+
+    if (groupBy === "date" || groupBy === "month") {
+      result.sort((a, b) => b.key.localeCompare(a.key));
+    } else if (groupBy === "type") {
+      const typeOrder = ["expense", "income", "transfer", "offset"];
+      result.sort((a, b) => typeOrder.indexOf(a.key) - typeOrder.indexOf(b.key));
+    } else {
+      result.sort((a, b) => b.items.length - a.items.length);
+    }
+
+    return result;
+  }, [filteredTxs, groupBy, nameMap, newTxIds]);
+
+  const toggleGroupCollapse = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const handleDelete = async (tx: TransactionItem) => {
     if (!window.confirm(`确定要删除「${tx.payee || tx.narration} (${formatCurrency(tx.amount)})」吗？`)) {
       return;
@@ -375,6 +528,170 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const incStmt = report?.income_statement;
   const balSheet = report?.balance_sheet;
 
+  const renderTxRow = (tx: TransactionItem) => {
+    const normType = getNormalizedTxType(tx);
+    const isPositiveFlow =
+      (normType === "income" && !tx.is_offset) || (normType === "expense" && tx.is_offset);
+    const isNew = Boolean(newTxIds?.has(tx.id));
+
+    return (
+      <tr
+        key={tx.id}
+        onMouseEnter={() => {
+          if (isNew && onDismissNewDot) onDismissNewDot(tx.id);
+        }}
+        onClick={() => {
+          if (isNew && onDismissNewDot) onDismissNewDot(tx.id);
+          setDrawerTx(tx);
+        }}
+        className={`hover:bg-accent/40 transition-colors cursor-pointer group ${
+          isNew ? "bg-blue-500/[0.04] dark:bg-blue-400/[0.05]" : ""
+        }`}
+      >
+        <td className="py-3 px-4 font-mono text-muted-foreground whitespace-nowrap">
+          <div className="flex items-center gap-2">
+            {isNew ? (
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 ring-2 ring-blue-500/25 shrink-0 transition-opacity duration-300"
+                title="新导入未核对账单，鼠标划过或点击即可消除标记"
+              />
+            ) : (
+              <span className="inline-block h-1.5 w-1.5 shrink-0 opacity-0 pointer-events-none" />
+            )}
+            <span>{tx.date}</span>
+          </div>
+        </td>
+        <td className="py-3 px-3 whitespace-nowrap">{renderTypeBadge(tx)}</td>
+        <td className="py-3 px-4 font-semibold text-foreground max-w-[180px] truncate">
+          {tx.payee || "—"}
+        </td>
+        <td className="py-3 px-4 text-muted-foreground max-w-[200px] truncate">
+          {tx.narration || "—"}
+        </td>
+        {/* 行内快速下拉修改分类 / 转入账户 */}
+        <td
+          className="py-2.5 px-4 whitespace-nowrap"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <select
+            value={tx.category}
+            disabled={updatingRowId === tx.id}
+            onChange={(e) => handleQuickCategoryChange(tx, e.target.value)}
+            aria-label="快速修改分类或转入账户"
+            className="h-7 max-w-[185px] rounded-md border border-border/70 bg-secondary/70 hover:bg-secondary px-2 text-[11px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer transition-colors"
+          >
+            {normType === "expense" && (
+              <>
+                {!expenseCats.some((c) => c.account === tx.category) && tx.category && (
+                  <option value={tx.category}>{nameMap[tx.category] || tx.category}</option>
+                )}
+                {expenseCats.map((c) => (
+                  <option key={c.id} value={c.account}>
+                    {c.name}
+                  </option>
+                ))}
+              </>
+            )}
+            {normType === "income" && (
+              <>
+                {!incomeCats.some((c) => c.account === tx.category) && tx.category && (
+                  <option value={tx.category}>{nameMap[tx.category] || tx.category}</option>
+                )}
+                {incomeCats.map((c) => (
+                  <option key={c.id} value={c.account}>
+                    {c.name}
+                  </option>
+                ))}
+              </>
+            )}
+            {normType === "transfer" && (
+              <>
+                <optgroup label="资金与信用卡账户">
+                  {activeAccounts.map((a) => (
+                    <option key={a.id} value={a.account}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+                {activeDebts.length > 0 && (
+                  <optgroup label="贷款与负债账户">
+                    {activeDebts.map((d) => (
+                      <option key={d.id} value={d.account}>
+                        [贷款] {d.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {(archivedAccounts.length > 0 || archivedDebts.length > 0) && (
+                  <optgroup label="已归档账户与债务">
+                    {archivedAccounts.map((a) => (
+                      <option key={a.id} value={a.account}>
+                        {a.name} (已归档)
+                      </option>
+                    ))}
+                    {archivedDebts.map((d) => (
+                      <option key={d.id} value={d.account}>
+                        [贷款] {d.name} (已归档)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </>
+            )}
+          </select>
+        </td>
+        <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
+          {nameMap[tx.account] || tx.account}
+        </td>
+        <td
+          className={`py-3 px-4 font-mono font-bold text-right whitespace-nowrap text-sm ${
+            tx.is_offset
+              ? "text-sky-400"
+              : isPositiveFlow
+              ? "text-emerald-400"
+              : normType === "expense"
+              ? "text-rose-400"
+              : "text-foreground"
+          }`}
+        >
+          {isPositiveFlow
+            ? "+"
+            : normType === "expense" || (normType === "income" && tx.is_offset)
+            ? "-"
+            : ""}
+          {formatCurrency(tx.amount)}
+        </td>
+        <td
+          className="py-3 px-4 text-right whitespace-nowrap"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="inline-flex items-center gap-1 opacity-80 group-hover:opacity-100">
+            <Button
+              variant="ghost"
+              size="xs"
+              title="编辑账单"
+              onClick={() => {
+                if (isNew && onDismissNewDot) onDismissNewDot(tx.id);
+                setDrawerTx(tx);
+              }}
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              title="删除账单"
+              className="text-rose-400 hover:text-rose-300"
+              onClick={() => handleDelete(tx)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="space-y-5">
       {/* 顶部 4 张汇总指标卡 */}
@@ -437,6 +754,29 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </CardContent>
         </Card>
       </div>
+
+      {/* 待确认账目提醒横幅 (防止退款或需人工确认的流水被忽视) */}
+      {pendingItems && pendingItems.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <span>
+              检测到 <strong>{pendingItems.length} 笔待确认流水</strong>
+              （包含退款冲减或待核实科目，例如：<strong>{pendingItems[0]?.payee} ¥{pendingItems[0]?.amount}</strong>），目前尚未正式写入账本。
+            </span>
+          </div>
+          {onNavigateToPending && (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={onNavigateToPending}
+              className="border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 font-medium shrink-0"
+            >
+              前往「待确认账目」核对入账 ➔
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* 筛选工具栏 */}
       <Card>
@@ -516,6 +856,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               ))}
             </Select>
 
+            <Select
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as GroupByMode)}
+              className="w-36"
+              aria-label="账单分组"
+            >
+              <option value="none">📑 不分组</option>
+              <option value="date">📅 按日期分组</option>
+              <option value="month">🗓️ 按月份分组</option>
+              <option value="type">🏷️ 按收支类型</option>
+              <option value="category">📂 按记账分类</option>
+              <option value="account">💳 按支付账户</option>
+              <option value="source">📥 按数据来源</option>
+            </Select>
+
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -535,12 +890,47 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       {/* 账单明细表格 */}
       <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/30">
-          <div className="text-xs font-semibold text-muted-foreground">
-            共 <span className="text-foreground font-bold">{filteredTxs.length}</span> 笔账单
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3 bg-muted/30">
+          <div className="flex items-center gap-3">
+            <div className="text-xs font-semibold text-muted-foreground">
+              共 <span className="text-foreground font-bold">{filteredTxs.length}</span> 笔账单
+            </div>
+            {totalNewInView > 0 && (
+              <div className="inline-flex items-center gap-1.5 text-xs text-blue-500 dark:text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 ring-2 ring-blue-500/25 animate-pulse" />
+                <span>{totalNewInView} 笔新导入待核对</span>
+                {onDismissAllNewDots && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDismissAllNewDots();
+                    }}
+                    className="ml-1 text-[11px] underline hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                  >
+                    全部已看
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            可直接下拉修改分类，或点击任意账单在右侧编辑详情
+          <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+            <span>可直接下拉修改分类，或点击任意账单在右侧编辑详情</span>
+            {groupBy !== "none" && groupedData.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (collapsedGroups.size > 0) {
+                    setCollapsedGroups(new Set());
+                  } else {
+                    setCollapsedGroups(new Set(groupedData.map((g) => g.key)));
+                  }
+                }}
+                className="text-primary hover:underline text-[11px] font-medium ml-1.5"
+              >
+                {collapsedGroups.size > 0 ? "全部展开" : "全部折叠"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -565,146 +955,47 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                     暂无符合条件的账单记录
                   </td>
                 </tr>
+              ) : groupBy === "none" ? (
+                filteredTxs.map((tx) => renderTxRow(tx))
               ) : (
-                filteredTxs.map((tx) => {
-                  const normType = getNormalizedTxType(tx);
-                  const isPositiveFlow =
-                    (normType === "income" && !tx.is_offset) || (normType === "expense" && tx.is_offset);
-
+                groupedData.map((group) => {
+                  const isCollapsed = collapsedGroups.has(group.key);
                   return (
-                    <tr
-                      key={tx.id}
-                      onClick={() => setDrawerTx(tx)}
-                      className="hover:bg-accent/40 transition-colors cursor-pointer group"
-                    >
-                      <td className="py-3 px-4 font-mono text-muted-foreground whitespace-nowrap">
-                        {tx.date}
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">{renderTypeBadge(tx)}</td>
-                      <td className="py-3 px-4 font-semibold text-foreground max-w-[180px] truncate">
-                        {tx.payee || "—"}
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground max-w-[200px] truncate">
-                        {tx.narration || "—"}
-                      </td>
-                      {/* 行内快速下拉修改分类 / 转入账户 */}
-                      <td
-                        className="py-2.5 px-4 whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
+                    <React.Fragment key={group.key}>
+                      <tr
+                        onClick={() => toggleGroupCollapse(group.key)}
+                        className="bg-muted/40 hover:bg-muted/60 text-muted-foreground border-y font-medium select-none cursor-pointer transition-colors"
                       >
-                        <select
-                          value={tx.category}
-                          disabled={updatingRowId === tx.id}
-                          onChange={(e) => handleQuickCategoryChange(tx, e.target.value)}
-                          aria-label="快速修改分类或转入账户"
-                          className="h-7 max-w-[185px] rounded-md border border-border/70 bg-secondary/70 hover:bg-secondary px-2 text-[11px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer transition-colors"
-                        >
-                          {normType === "expense" && (
-                            <>
-                              {!expenseCats.some((c) => c.account === tx.category) && tx.category && (
-                                <option value={tx.category}>{nameMap[tx.category] || tx.category}</option>
+                        <td colSpan={8} className="py-2.5 px-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground/70 w-3 inline-block">
+                                {isCollapsed ? "▶" : "▼"}
+                              </span>
+                              <span className="font-semibold text-foreground text-xs">
+                                {group.title}
+                              </span>
+                              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-normal">
+                                {group.items.length} 笔
+                              </Badge>
+                              {group.newCount > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-blue-500 dark:text-blue-400 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded-full">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 ring-2 ring-blue-500/25" />
+                                  {group.newCount} 笔新导入
+                                </span>
                               )}
-                              {expenseCats.map((c) => (
-                                <option key={c.id} value={c.account}>
-                                  {c.name}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                          {normType === "income" && (
-                            <>
-                              {!incomeCats.some((c) => c.account === tx.category) && tx.category && (
-                                <option value={tx.category}>{nameMap[tx.category] || tx.category}</option>
-                              )}
-                              {incomeCats.map((c) => (
-                                <option key={c.id} value={c.account}>
-                                  {c.name}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                          {normType === "transfer" && (
-                            <>
-                              <optgroup label="资金与信用卡账户">
-                                {activeAccounts.map((a) => (
-                                  <option key={a.id} value={a.account}>
-                                    {a.name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              {activeDebts.length > 0 && (
-                                <optgroup label="贷款与负债账户">
-                                  {activeDebts.map((d) => (
-                                    <option key={d.id} value={d.account}>
-                                      [贷款] {d.name}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                              {(archivedAccounts.length > 0 || archivedDebts.length > 0) && (
-                                <optgroup label="已归档账户与债务">
-                                  {archivedAccounts.map((a) => (
-                                    <option key={a.id} value={a.account}>
-                                      {a.name} (已归档)
-                                    </option>
-                                  ))}
-                                  {archivedDebts.map((d) => (
-                                    <option key={d.id} value={d.account}>
-                                      [贷款] {d.name} (已归档)
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                            </>
-                          )}
-                        </select>
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
-                        {nameMap[tx.account] || tx.account}
-                      </td>
-                      <td
-                        className={`py-3 px-4 font-mono font-bold text-right whitespace-nowrap text-sm ${
-                          tx.is_offset
-                            ? "text-sky-400"
-                            : isPositiveFlow
-                            ? "text-emerald-400"
-                            : normType === "expense"
-                            ? "text-rose-400"
-                            : "text-foreground"
-                        }`}
-                      >
-                        {isPositiveFlow
-                          ? "+"
-                          : normType === "expense" || (normType === "income" && tx.is_offset)
-                          ? "-"
-                          : ""}
-                        {formatCurrency(tx.amount)}
-                      </td>
-                      <td
-                        className="py-3 px-4 text-right whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="inline-flex items-center gap-1 opacity-80 group-hover:opacity-100">
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            title="编辑账单"
-                            onClick={() => setDrawerTx(tx)}
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            title="删除账单"
-                            className="text-rose-400 hover:text-rose-300"
-                            onClick={() => handleDelete(tx)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                            </div>
+                            <div className="text-[11px] font-mono text-muted-foreground flex items-center gap-3">
+                              <span>{group.subtotalText}</span>
+                              <span className="text-[10px] text-muted-foreground/50">
+                                {isCollapsed ? "点击展开" : "点击折叠"}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      {!isCollapsed && group.items.map((tx) => renderTxRow(tx))}
+                    </React.Fragment>
                   );
                 })
               )}

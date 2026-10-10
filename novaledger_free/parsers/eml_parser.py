@@ -32,6 +32,7 @@ BANK_PROFILES: List[Dict[str, Any]] = [
 NON_TRANSACTION_KEYWORDS = [
     "限额修改", "修改POS", "关闭境外", "关闭取款", "开通功能", "限额调整",
     "验证码", "登录提醒", "密码修改", "积分到期", "优惠券", "安全提示",
+    "活动预告", "活动提醒", "会员日", "积分商城", "礼品卡", "问卷调查", "招聘", "征稿", "会议通知", "录用通知", "入场券"
 ]
 
 
@@ -46,6 +47,13 @@ class EMLParser:
 
     def __init__(self, ai_service: Optional[Any] = None):
         self.ai_service = ai_service
+        self.ai_disabled_for_session = False
+        self.ai_call_count = 0
+
+    def reset_ai_circuit_breaker(self):
+        """重置 AI 熔断器状态，供新一轮同步开始时调用"""
+        self.ai_disabled_for_session = False
+        self.ai_call_count = 0
 
     @staticmethod
     def get_supported_banks() -> List[Dict[str, str]]:
@@ -351,6 +359,17 @@ class EMLParser:
         cat_hint = "退款" if is_refund else ("信用卡还款" if is_repayment else "银行通知")
         narration = f"{bank['short']}卡({card_tail}) {action_label}".strip()
 
+        # 严格规范化为 YYYY-MM-DD 格式
+        clean_date = re.sub(r"[/\.]", "-", str(date_str).strip())
+        parts = clean_date.split("-")
+        if len(parts) == 3:
+            try:
+                clean_date = f"{int(parts[0]):04d}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+            except Exception:
+                clean_date = datetime.now().strftime("%Y-%m-%d")
+        else:
+            clean_date = datetime.now().strftime("%Y-%m-%d")
+
         payload: Dict[str, Any] = {
             "subject": subject,
             "card": card_tail,
@@ -366,7 +385,7 @@ class EMLParser:
             payload.update(extra_meta)
 
         return RawRecord(
-            date=date_str,
+            date=clean_date,
             time_str=time_str,
             payee=clean_payee,
             narration=narration,
@@ -374,7 +393,7 @@ class EMLParser:
             direction=direction,
             status_text=status_text,
             source_type=SourceType.BANK_EMAIL,
-            source_tx_id=f"eml_{bank['code']}_{card_tail}_{date_str}_{time_str.replace(':', '')}_{amt}",
+            source_tx_id=f"eml_{bank['code']}_{card_tail}_{clean_date}_{time_str.replace(':', '')}_{amt}",
             channel=f"{bank['name']}({card_tail})",
             category_hint=cat_hint,
             raw_payload=payload,
@@ -428,7 +447,7 @@ class EMLParser:
 
         # 2. 信用卡还款匹配
         m_repay = re.search(
-            rf"(信用卡还款|自动还款|账单还款|还款入账|成功还款|已还款){amt_pat}",
+            rf"(信用卡还款(?:交易|支出|转账)?|自动还款(?:交易)?|账单还款(?:交易)?|还款入账|成功还款|已还款){amt_pat}",
             body
         )
         if m_repay:
@@ -443,7 +462,7 @@ class EMLParser:
                 is_repayment=True,
             )]
 
-        # 3. 消费 / 快捷支付 / 支取 / 扣款匹配
+        # 3. 消费 / 快捷支付 / 支取 / 扣款 / 境外消费匹配
         # 句式 3A: 于/在【商户名称】(消费/快捷支付/支付) 128.00元
         m_pay_bracket = re.search(
             rf"(?:于|在)?【([^】]+)】\s*(?:完成)?(快捷支付|银联无卡支付|POS消费|网联支付|网络消费|线上消费|扫码支付|消费|支付|支出|扣款){amt_pat}",
@@ -476,9 +495,27 @@ class EMLParser:
                 card_balance=card_balance,
             )]
 
-        # 句式 3C (工行/农行/中行/建行/交行/邮储/民生常见): (消费/支出/支取/快捷支付/网上支付)人民币100.00元...(对方为/商户/摘要: xxx)
+        # 句式 3C (境外线上消费授权 / 消费授权)
+        m_overseas = re.search(
+            r"(境外(?:线上)?消费(?:授权)?|消费授权|预授权完成|预授权)(?:[A-Z]{3}\s*[0-9,]+(?:\.\d+)?)?(?:[（\(](?:折合)?(?:人民币|CNY|RMB|¥|￥|\s)*([0-9,]+(?:\.\d+)?)[元\s]*[）\)])?(?:人民币|CNY|RMB|¥|￥|\s)*([0-9,]+(?:\.\d+)?)?",
+            body
+        )
+        if m_overseas:
+            amt_val_str = m_overseas.group(2) or m_overseas.group(3)
+            if amt_val_str:
+                return [self._build_record(
+                    bank, card_tail, date_str, time_str,
+                    payee=f"{bank['name']}境外线上消费",
+                    action_label=m_overseas.group(1),
+                    amt_str=amt_val_str,
+                    direction="支出",
+                    subject=subject,
+                    card_balance=card_balance,
+                )]
+
+        # 句式 3D (工行/农行/中行/建行/交行/邮储/民生/招行转账常见): (消费/支出/支取/快捷支付/网上支付/实时转至他行)人民币100.00元...(对方为/商户/摘要/收款人: xxx)
         m_pay_state = re.search(
-            rf"(快捷支付|网上支付|银联消费|财付通消费|支付宝消费|微信支付|POS消费|消费|支出|支取|转出|扣款|代扣)(?:人民币|CNY|RMB|¥|￥|\s)*([0-9,]+(?:\.\d+)?)\s*(?:元|CNY|RMB)?(?:.*?(?:对方(?:户名)?[为：:]+|商户(?:名称)?[为：:]+|交易地点[为：:]+|摘要[为：:]+|特约商户[为：:]+|【)([^，。；\s】]+))?",
+            rf"(快捷支付|网上支付|银联消费|财付通消费|支付宝消费|微信支付|POS消费|实时转至他行|转至他行|跨行转出|转账汇款|转账转出|消费|支出|支取|转出|扣款|代扣)(?:人民币|CNY|RMB|¥|￥|\s)*([0-9,]+(?:\.\d+)?)\s*(?:元|CNY|RMB)?(?:.*?(?:对方(?:户名)?[为：:]+|收款人[为：:\s]*|商户(?:名称)?[为：:]+|交易地点[为：:]+|摘要[为：:]+|特约商户[为：:]+|【)([^，。；\s】]+))?",
             body
         )
         if m_pay_state:
@@ -495,9 +532,9 @@ class EMLParser:
                 card_balance=card_balance,
             )]
 
-        # 4. 收入 / 转入 / 工资 / 存入匹配
+        # 4. 收入 / 转入 / 工资 / 存入 / 柜台存款匹配
         m_income = re.search(
-            rf"(他行实时转入|实时转入|转账存入|代发工资|工资入账|报销入账|转入|存入|入账){amt_pat}(?:.*?(?:付方|对方(?:户名)?|摘要)[为：:\s]*([^，。；\s]+))?",
+            rf"(他行实时转入|实时转入|转账存入|柜台存款|现金存款|现金存入|代发工资|工资入账|报销入账|转入|存入|存款|入账){amt_pat}(?:.*?(?:付方|对方(?:户名)?|摘要|交款人)[为：:\s]*([^，。；\s]+))?",
             body
         )
         if m_income:
@@ -515,9 +552,33 @@ class EMLParser:
                 card_balance=card_balance,
             )]
 
+        # 5. 招行信用卡每日管家 / 消费明细汇总单行句式
+        m_cmb_daily = re.search(
+            r"(?:(\d{4}[/\-]\d{1,2}[/\-]\d{1,2})\s+)?(?:您的)?消费明细如下[：:]\s*(?:(\d{1,2}:\d{2}(?::\d{2})?)\s+)?([A-Z]{3}|¥|￥|\$)?\s*([0-9,]+(?:\.\d+)?)\s*(?:尾号(\d{4})\s+)?(\S+)\s+([^，。\n\r]+)",
+            body
+        )
+        if m_cmb_daily:
+            tx_d = m_cmb_daily.group(1) or date_str
+            tx_t = m_cmb_daily.group(2) or time_str
+            c_tail = m_cmb_daily.group(5) or card_tail
+            return [self._build_record(
+                bank, c_tail, tx_d, tx_t,
+                payee=m_cmb_daily.group(7).strip(),
+                action_label=m_cmb_daily.group(6).strip(),
+                amt_str=m_cmb_daily.group(4),
+                direction="支出",
+                subject=subject,
+                card_balance=card_balance,
+            )]
+
         return []
 
-    def parse_bytes(self, raw_bytes: bytes, fallback_date: Optional[datetime] = None) -> List[RawRecord]:
+    def parse_bytes(
+        self,
+        raw_bytes: bytes,
+        fallback_date: Optional[datetime] = None,
+        use_ai_fallback: bool = False
+    ) -> List[RawRecord]:
         """直接解析 raw eml 字节流"""
         msg = email.message_from_bytes(raw_bytes, policy=policy.default)
         subject = str(msg.get("Subject", ""))
@@ -540,7 +601,7 @@ class EMLParser:
             body=body,
             raw_html=raw_html,
             fallback_dt=fallback_dt,
-            use_ai_fallback=True,
+            use_ai_fallback=use_ai_fallback,
         )
         return records
 
@@ -551,7 +612,7 @@ class EMLParser:
         body: str,
         raw_html: str,
         fallback_dt: datetime,
-        use_ai_fallback: bool = True
+        use_ai_fallback: bool = False
     ) -> Tuple[List[RawRecord], Dict[str, Any]]:
         """核心三层解析流水线，返回 (RawRecord列表, 诊断元数据)"""
         bank = self.identify_bank(sender, subject, body)
@@ -561,8 +622,9 @@ class EMLParser:
             "engine": "none",
         }
 
-        if any(kw in body for kw in NON_TRANSACTION_KEYWORDS):
-            meta["skipped_reason"] = "安全/非动账提醒邮件"
+        full_check_text = f"{subject} {body}"
+        if any(kw in full_check_text for kw in NON_TRANSACTION_KEYWORDS):
+            meta["skipped_reason"] = "安全/营销/非动账提醒邮件"
             return [], meta
 
         card_tail = self._extract_card_tail(body)
@@ -580,17 +642,35 @@ class EMLParser:
             meta["engine"] = "builtin_regex"
             return sentence_records, meta
 
-        # 第 3 层：可选 AI 语义兜底解析
-        looks_like_bank_mail = (bank["code"] != "bank") or any(
-            w in f"{subject} {body}" for w in ("尾号", "账单", "消费", "人民币", "CNY", "还款", "转入", "支出")
+        # 第 3 层：可选 AI 语义兜底解析（仅对真正具有金融/银行特征的未识别邮件生效，并受熔断器保护）
+        is_known_bank = (bank["code"] != "bank")
+        is_explicit_financial = any(
+            w in f"{sender} {subject}".lower()
+            for w in ("bank", "银联", "信用卡", "农信", "信用社", "农商行", "城商行", "动账", "对账单", "交易通知", "账户变动")
         )
-        if use_ai_fallback and looks_like_bank_mail and self.ai_service and getattr(self.ai_service, "is_available", lambda: False)():
-            ai_items = self.ai_service.parse_bank_email_fallback(
-                subject=subject,
-                sender=sender,
-                body_text=body,
-                default_date=fallback_dt.strftime("%Y-%m-%d")
-            )
+        looks_like_bank_mail = is_known_bank or is_explicit_financial
+
+        if (
+            use_ai_fallback
+            and looks_like_bank_mail
+            and not getattr(self, "ai_disabled_for_session", False)
+            and getattr(self, "ai_call_count", 0) < 5
+            and self.ai_service
+            and getattr(self.ai_service, "is_available", lambda: False)()
+        ):
+            try:
+                self.ai_call_count = getattr(self, "ai_call_count", 0) + 1
+                ai_items = self.ai_service.parse_bank_email_fallback(
+                    subject=subject,
+                    sender=sender,
+                    body_text=body,
+                    default_date=fallback_dt.strftime("%Y-%m-%d"),
+                    timeout=5.0
+                )
+            except Exception:
+                self.ai_disabled_for_session = True
+                ai_items = []
+
             if ai_items:
                 ai_records: List[RawRecord] = []
                 for idx, item in enumerate(ai_items):

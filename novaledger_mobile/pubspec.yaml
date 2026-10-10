@@ -1,0 +1,51 @@
+name: novaledger_mobile
+description: "星芒账本 · NovaLedger 独立安卓移动客户端 (基于本地 SQLite 与 Beancount 纯文本导出生态)"
+publish_to: 'none'
+version: 2.0.1+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # 本地数据库与路径
+  sqflite: ^2.3.2
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # 图表统计 (月度趋势、分类占比饼图)
+  fl_chart: ^0.68.0
+
+  # 日期格式化与本地化
+  intl: ^0.19.0
+
+  # 数据导出与系统分享面板 (微信传输助手、另存为)
+  share_plus: ^9.0.0
+
+  # 电脑端迁移包与账单 CSV 选择导入
+  file_picker: ^8.0.3
+
+  # ZIP 压缩包解压 (用于解析 .nlmobile 迁移包)
+  archive: ^3.6.1
+
+  # CSV 解析器 (用于微信/支付宝账单导入)
+  csv: ^6.0.0
+
+  # UUID 生成与哈希
+  uuid: ^4.4.0
+  crypto: ^3.0.3
+
+  # Gemini AI 智能分类与财务洞察
+  google_generative_ai: ^0.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

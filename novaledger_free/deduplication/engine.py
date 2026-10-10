@@ -74,6 +74,7 @@ class ImportPipelineEngine:
         duplicate_count = 0
         pending_count = 0
         failed_count = 0
+        added_ids: List[str] = []
 
         for r in records:
             # 1. 交易状态异常处理
@@ -93,6 +94,13 @@ class ImportPipelineEngine:
             if dup_fp:
                 duplicate_count += 1
                 continue
+
+            # 对邮件自动轮询同步：避免回溯窗口中已处于待确认队列的动账被重复加入
+            if r.source_type == SourceType.BANK_EMAIL:
+                dup_pending = getattr(self.db, "find_pending_by_fingerprint", lambda fp: None)(r.fingerprint)
+                if dup_pending:
+                    duplicate_count += 1
+                    continue
 
             # 4. 退款、信用卡还款或 AI 兜底解析状态进入待确认队列 (不直接静默写入猜测账目)
             raw_p = r.raw_payload if isinstance(r.raw_payload, dict) else {}
@@ -163,7 +171,7 @@ class ImportPipelineEngine:
                     (target_acc, -r.amount, "CNY")
                 ]
 
-            ok, msg, _ = self.ledger.append_transaction(
+            ok, msg, created_tx = self.ledger.append_transaction(
                 tx_date=r.date,
                 payee=r.payee,
                 narration=r.narration,
@@ -176,6 +184,8 @@ class ImportPipelineEngine:
 
             if ok:
                 added_count += 1
+                if created_tx and getattr(created_tx, "id", None):
+                    added_ids.append(created_tx.id)
             else:
                 failed_count += 1
 
@@ -187,7 +197,8 @@ class ImportPipelineEngine:
             "added": added_count,
             "duplicate": duplicate_count,
             "pending": pending_count,
-            "failed": failed_count
+            "failed": failed_count,
+            "added_ids": added_ids
         }
 
     def rollback_batch(self, batch_id: str) -> Tuple[bool, str, int]:

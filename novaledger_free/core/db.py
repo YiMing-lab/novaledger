@@ -225,6 +225,14 @@ class DatabaseManager:
         with self.get_connection() as conn:
             conn.execute("UPDATE pending_items SET status = ? WHERE item_id = ?", (new_status, item_id))
 
+    def find_pending_by_fingerprint(self, fingerprint: str) -> Optional[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM pending_items WHERE source_fingerprint = ? AND status = 'pending'",
+                (fingerprint,)
+            ).fetchone()
+            return dict(row) if row else None
+
     def log_operation(self, op_id: str, op_type: OperationType, target_id: str, description: str,
                       before_state: Optional[str] = None, after_state: Optional[str] = None) -> None:
         with self.get_connection() as conn:

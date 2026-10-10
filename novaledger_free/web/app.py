@@ -680,7 +680,7 @@ def create_app(data_dir: Optional[Path | str] = None) -> FastAPI:
         except Exception:
             src_type = SourceType.MANUAL
 
-        ok, msg, _ = ledger_mgr.append_transaction(
+        ok, msg, created_tx = ledger_mgr.append_transaction(
             tx_date=target["date"],
             payee=target["payee"] or "日常交易",
             narration=(target.get("narration") or "").strip(),
@@ -693,7 +693,8 @@ def create_app(data_dir: Optional[Path | str] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=msg)
 
         db_mgr.resolve_pending_item(item_id, new_status="resolved")
-        return {"success": True, "message": "已确认并记入账本"}
+        created_id = created_tx.id if created_tx else None
+        return {"success": True, "message": "已确认并记入账本", "created_tx_id": created_id}
 
     @app.post("/api/import/upload")
     async def upload_import_file(
@@ -1045,6 +1046,25 @@ def create_app(data_dir: Optional[Path | str] = None) -> FastAPI:
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"备份导出失败: {str(e)}")
+
+    @app.get("/api/backup/export_mobile")
+    def export_mobile_package():
+        try:
+            from novaledger_free.migration.export_mobile import export_mobile_bundle
+            result = export_mobile_bundle()
+            pkg_path = Path(result["nlmobile_path"])
+            filename = pkg_path.name
+            return FileResponse(
+                path=str(pkg_path),
+                media_type="application/octet-stream",
+                filename=filename,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Access-Control-Expose-Headers": "Content-Disposition"
+                }
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"移动端迁移包导出失败: {str(e)}")
 
     @app.post("/api/backup/import")
     async def import_backup(file: UploadFile = File(...)):

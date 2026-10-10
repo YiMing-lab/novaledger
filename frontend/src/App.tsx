@@ -59,6 +59,49 @@ const NovaLedgerShell: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [syncingMail, setSyncingMail] = useState<boolean>(false);
 
+  // 新导入账单 ID 集合 (持久化至 localStorage，未核对前不丢失)
+  const [newTxIds, setNewTxIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("novaledger_new_tx_ids");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const markTxIdsAsNew = useCallback((ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    setNewTxIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => {
+        if (id) next.add(id);
+      });
+      try {
+        localStorage.setItem("novaledger_new_tx_ids", JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const dismissNewDot = useCallback((id: string) => {
+    setNewTxIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      try {
+        localStorage.setItem("novaledger_new_tx_ids", JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const dismissAllNewDots = useCallback(() => {
+    setNewTxIds(new Set());
+    try {
+      localStorage.removeItem("novaledger_new_tx_ids");
+    } catch {}
+  }, []);
+
   // Modals State
   const [recordOpen, setRecordOpen] = useState<boolean>(false);
   const [editingTx, setEditingTx] = useState<TransactionItem | null>(null);
@@ -161,15 +204,38 @@ const NovaLedgerShell: React.FC = () => {
   const handleTriggerMailSync = async () => {
     setSyncingMail(true);
     try {
+      const prevIds = new Set(transactions.map((t) => t.id));
       const res = await api.triggerMailSync();
-      const count = res.synced_count ?? res.imported ?? 0;
-      toast.success(
-        res.message || `邮件同步完成：新增 ${count} 笔待确认流水`
+      const added = res.added_count ?? res.details?.added ?? res.imported ?? 0;
+      const pending = res.pending_count ?? res.details?.pending ?? res.synced_count ?? 0;
+      const totalNew = added + pending;
+      const addedIds: string[] = res.added_ids || res.details?.added_ids || [];
+
+      const msg = res.message || (
+        totalNew > 0
+          ? `邮件同步完成：自动入账 ${added} 笔，待确认 ${pending} 笔`
+          : "邮件同步完成：暂无新动账通知"
       );
+      toast.success(msg);
       await loadAllData();
-      if (count > 0) {
+
+      if (addedIds.length > 0) {
+        markTxIdsAsNew(addedIds);
+      } else if (added > 0) {
+        try {
+          const freshTxs = await api.getTransactions();
+          const newFound = freshTxs.filter((t) => !prevIds.has(t.id)).map((t) => t.id);
+          if (newFound.length > 0) {
+            markTxIdsAsNew(newFound);
+          }
+        } catch {}
+      }
+
+      if (pending > 0) {
         setActiveView("settings");
         setSettingsSubTab("pending");
+      } else if (added > 0) {
+        setActiveView("transactions");
       }
     } catch (err: any) {
       toast.error(err.message || "邮件同步失败，请检查 IMAP 邮箱配置");
@@ -218,7 +284,7 @@ const NovaLedgerShell: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold tracking-tight text-base">NovaLedger</span>
                   <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4">
-                    v2.0
+                    v2.0.1
                   </Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground">个人记账与资产管理</p>
@@ -423,6 +489,11 @@ const NovaLedgerShell: React.FC = () => {
                     onMonthChange={setSelectedMonth}
                     onOpenRecord={handleOpenRecord}
                     onRefresh={() => loadAllData()}
+                    newTxIds={newTxIds}
+                    onDismissNewDot={dismissNewDot}
+                    onDismissAllNewDots={dismissAllNewDots}
+                    pendingItems={pendingItems}
+                    onNavigateToPending={() => handleNavigate("settings", "pending")}
                   />
                 )}
 
@@ -460,6 +531,8 @@ const NovaLedgerShell: React.FC = () => {
                     validationErrors={validationErrors}
                     onRefresh={() => loadAllData()}
                     onTriggerMailSync={handleTriggerMailSync}
+                    syncingMail={syncingMail}
+                    onMarkNewTxs={markTxIdsAsNew}
                   />
                 )}
               </>

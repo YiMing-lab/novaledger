@@ -40,7 +40,9 @@ import {
   FileSpreadsheet,
   FlaskConical,
   RotateCcw,
+  Smartphone,
 } from "lucide-react";
+
 
 interface SettingsViewProps {
   activeSubTab: string;
@@ -53,6 +55,8 @@ interface SettingsViewProps {
   validationErrors: string[];
   onRefresh: () => void;
   onTriggerMailSync: () => void;
+  syncingMail?: boolean;
+  onMarkNewTxs?: (ids: string[]) => void;
 }
 
 const FOURTEEN_BANKS = [
@@ -98,6 +102,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   validationErrors,
   onRefresh,
   onTriggerMailSync,
+  syncingMail = false,
+  onMarkNewTxs,
 }) => {
   const toast = useToast();
   const activeAccounts = accounts.filter((a) => !a.is_archived);
@@ -339,6 +345,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         editState.is_offset
       );
       toast.success(res.message || "已处理待确认账目");
+      if (res.created_tx_id && onMarkNewTxs) {
+        onMarkNewTxs([res.created_tx_id]);
+      }
       onRefresh();
     } catch (e: any) {
       toast.error(`处理失败: ${e.message}`);
@@ -353,6 +362,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       const res = await api.uploadImportFile(file, importSourceType, importDefaultAcc);
       const s = res.summary || {};
+      const addedIds = s.added_ids || [];
+      if (addedIds.length > 0 && onMarkNewTxs) {
+        onMarkNewTxs(addedIds);
+      }
       toast.success(
         `导入完成：新增 ${s.added || 0} 笔，跳过重复 ${s.duplicate || 0} 笔，待确认 ${s.pending || 0} 笔`
       );
@@ -1119,8 +1132,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" size="sm" onClick={onTriggerMailSync}>
-                    立即同步邮件
+                  <Button variant="outline" size="sm" onClick={onTriggerMailSync} disabled={syncingMail}>
+                    {syncingMail ? "正在同步..." : "立即同步邮件"}
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleTestMail}>
                     测试连接
@@ -1719,7 +1732,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </Button>
               </div>
 
+              <div className="flex items-center justify-between rounded-xl border border-primary/40 bg-primary/5 p-4">
+                <div>
+                  <div className="font-semibold text-sm flex items-center gap-2 text-primary">
+                    <Smartphone className="h-4 w-4 text-primary" />
+                    导出安卓手机端专属迁移包 (.nlmobile)
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    结构化整合当前全部交易、账户、债务与分类，手机 App 一键导入直接使用
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={async () => {
+                    try {
+                      await api.exportMobilePackage();
+                      toast.success("手机端迁移包 (.nlmobile) 已成功导出！直接发送至手机即可导入。");
+                    } catch (e: any) {
+                      toast.error(e.message);
+                    }
+                  }}
+                >
+                  📱 导出手机迁移包
+                </Button>
+              </div>
+
               <div className="flex items-center justify-between rounded-xl border bg-background/50 p-4">
+
                 <div>
                   <div className="font-semibold text-sm">从备份包还原数据 (.zip)</div>
                   <div className="text-xs text-muted-foreground mt-1">

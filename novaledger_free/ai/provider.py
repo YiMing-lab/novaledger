@@ -359,7 +359,13 @@ class AIService:
 
         raise last_error or RuntimeError("Gemini 请求失败")
 
-    def _invoke_llm(self, prompt: str, system_prompt: str = "", json_mode: bool = True) -> tuple[str, str]:
+    def _invoke_llm(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        json_mode: bool = True,
+        timeout: float = 22.0
+    ) -> tuple[str, str]:
         """统一调度当前激活的 AI 服务商并返回 (响应文本, 来源标识)"""
         provider = self.get_provider()
         prof = self.get_profile(provider)
@@ -368,6 +374,7 @@ class AIService:
                 prompt=prompt,
                 system_prompt=system_prompt,
                 json_mode=json_mode,
+                timeout=timeout,
             )
             return text, f"ai_gemini_{prof['model']}"
         else:
@@ -375,6 +382,7 @@ class AIService:
                 prompt=prompt,
                 system_prompt=system_prompt,
                 provider=provider,
+                timeout=timeout,
             )
             return text, f"ai_{provider}_{prof['model']}"
 
@@ -593,6 +601,7 @@ class AIService:
         sender: str,
         body_text: str,
         default_date: str = "",
+        timeout: float = 6.0,
     ) -> List[Dict[str, Any]]:
         """
         当内置银行正则未命中且 AI 开启时，调用大模型从银行动账/账单邮件文本中提取结构化交易流水。
@@ -635,6 +644,7 @@ class AIService:
                 prompt=prompt,
                 system_prompt="你是一个精准的金融邮件结构化提取器，只输出合法 JSON 对象。",
                 json_mode=True,
+                timeout=timeout,
             )
             data = _extract_json_dict(raw_resp)
 

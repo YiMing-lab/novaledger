@@ -44,3 +44,11 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Flutter & Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+novaledger_mobile/build/
+novaledger_mobile/.dart_tool/

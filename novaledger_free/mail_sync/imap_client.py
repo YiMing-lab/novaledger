@@ -122,6 +122,9 @@ class IMAPSyncClient:
             chunk_size = 20
             all_records: List[RawRecord] = []
             max_fetched_uid = last_seen_uid
+            if hasattr(self.eml_parser, "reset_ai_circuit_breaker"):
+                self.eml_parser.reset_ai_circuit_breaker()
+            use_ai_in_bulk = bool(sync_cfg.get("use_ai_fallback", False))
 
             for i in range(0, len(all_uids), chunk_size):
                 chunk = all_uids[i : i + chunk_size]
@@ -134,7 +137,7 @@ class IMAPSyncClient:
                     if isinstance(item, tuple) and len(item) > 1:
                         raw_email_bytes = item[1]
                         try:
-                            recs = self.eml_parser.parse_bytes(raw_email_bytes)
+                            recs = self.eml_parser.parse_bytes(raw_email_bytes, use_ai_fallback=use_ai_in_bulk)
                             all_records.extend(recs)
                         except Exception:
                             pass
@@ -162,11 +165,29 @@ class IMAPSyncClient:
             sync_cfg["last_sync_time"] = datetime.now().isoformat()
             self.cfg.save_config()
 
+            details = import_res or {}
+            added = details.get("added", 0)
+            pending = details.get("pending", 0)
+            dup = details.get("duplicate", 0)
+            failed = details.get("failed", 0)
+
+            if added == 0 and pending == 0:
+                summary_msg = f"邮件同步完成：暂无新动账通知（已过滤 {dup} 笔历史重复记录）" if dup > 0 else "邮件同步完成：收件箱中暂无新动账通知"
+            else:
+                summary_msg = f"邮件同步完成：新增自动入账 {added} 笔，待确认 {pending} 笔（跳过 {dup} 笔重复）"
+
             return {
                 "status": "success",
-                "message": f"成功同步并处理 {len(all_records)} 笔交易通知",
+                "message": summary_msg,
                 "processed_count": len(all_records),
-                "details": import_res
+                "added_count": added,
+                "pending_count": pending,
+                "duplicate_count": dup,
+                "failed_count": failed,
+                "synced_count": pending + added,
+                "imported": added,
+                "added_ids": details.get("added_ids", []),
+                "details": details
             }
 
         except Exception as ex:
