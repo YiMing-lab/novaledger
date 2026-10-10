@@ -76,7 +76,7 @@ class CategoryPickerSheet extends StatelessWidget {
                           ? theme.colorScheme.primaryContainer
                           : theme.colorScheme.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.Border.all(
+                      border: Border.all(
                         color: isSelected
                             ? theme.colorScheme.primary
                             : theme.colorScheme.outlineVariant.withOpacity(0.3),

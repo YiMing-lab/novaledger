@@ -4,7 +4,6 @@ import 'package:archive/archive.dart';
 import 'package:sqflite/sqflite.dart';
 import '../database/database_helper.dart';
 import '../models/account.dart';
-import '../models/category.dart';
 import '../models/debt.dart';
 import '../models/posting.dart';
 import '../models/transaction_item.dart';

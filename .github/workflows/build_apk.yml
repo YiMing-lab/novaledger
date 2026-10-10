@@ -34,8 +34,9 @@ jobs:
       - name: Scaffold Official Android Platform Files
         working-directory: novaledger_mobile
         run: |
-          rm -rf android
+          rm -rf android test
           flutter create . --platforms=android --org=com.novaledger --project-name=novaledger_mobile
+          rm -rf test
 
       - name: Configure Android Permissions & App Settings
         working-directory: novaledger_mobile
@@ -58,6 +59,10 @@ jobs:
           gradle_path = 'android/app/build.gradle'
           with open(gradle_path, 'r', encoding='utf-8') as f:
               gc = f.read()
+          gc = gc.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 35')
+          gc = gc.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 35')
+          gc = gc.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 35')
+          gc = gc.replace('targetSdkVersion flutter.targetSdkVersion', 'targetSdkVersion 35')
           gc = gc.replace('minSdk = flutter.minSdkVersion', 'minSdk = 21')
           gc = gc.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
           with open(gradle_path, 'w', encoding='utf-8') as f:
@@ -73,7 +78,7 @@ jobs:
       - name: Verify Dart Code
         working-directory: novaledger_mobile
         run: |
-          flutter analyze --no-fatal-infos --no-fatal-warnings || true
+          flutter analyze
 
       - name: Build Android APK
         working-directory: novaledger_mobile

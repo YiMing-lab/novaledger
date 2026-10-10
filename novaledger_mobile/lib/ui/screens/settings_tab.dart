@@ -181,6 +181,7 @@ class _SettingsTabState extends State<SettingsTab> {
       );
 
       if (parsedItems.isEmpty) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('未识别到有效的微信或支付宝账单记录')),
         );

@@ -5,7 +5,7 @@ import '../models/posting.dart';
 import '../models/transaction_item.dart';
 
 class AccountingService {
-  static final _uuid = const Uuid();
+  static const _uuid = Uuid();
 
   /// 记录日常支出 (支持 Scheme B 消费退款红字冲减)
   static Future<bool> recordExpense({
