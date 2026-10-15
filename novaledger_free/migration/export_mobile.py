@@ -288,6 +288,32 @@ def _build_mobile_sqlite(db_file: Path, bundle: Dict[str, Any]) -> None:
             )
         )
 
+    # 写入分类
+    cats = bundle.get("categories", [])
+    if isinstance(cats, list):
+        for c in cats:
+            cur.execute(
+                """INSERT OR REPLACE INTO categories (key, name, parent_key, icon, color, type)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    c.get("account"),
+                    c.get("name"),
+                    c.get("parent_key"),
+                    c.get("icon", "category"),
+                    c.get("color", "#1976D2"),
+                    c.get("type", "expense")
+                )
+            )
+    elif isinstance(cats, dict):
+        for k, v in cats.items():
+            name = v.get("name", k) if isinstance(v, dict) else str(v)
+            cat_type = "income" if k.startswith("Income:") else "expense"
+            cur.execute(
+                """INSERT OR REPLACE INTO categories (key, name, parent_key, icon, color, type)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (k, name, None, "category", "#1976D2", cat_type)
+            )
+
     # 写入交易与分录
     now_iso = datetime.now().isoformat()
     for tx in bundle.get("transactions", []):
