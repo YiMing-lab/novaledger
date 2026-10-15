@@ -744,12 +744,8 @@ def create_app(data_dir: Optional[Path | str] = None) -> FastAPI:
 
     @app.post("/api/ai/suggest")
     def ai_suggest_category(req: AISuggestRequest):
-        allowed = [
-            "Expenses:Food:Dining", "Expenses:Food:Groceries", "Expenses:Food:Snacks",
-            "Expenses:Housing:Rent", "Expenses:Housing:Utilities", "Expenses:Transport:Transit",
-            "Expenses:Shopping:Daily", "Expenses:Shopping:Electronics", "Expenses:Entertainment:General",
-            "Expenses:Health:Medical", "Expenses:Other:General", "Income:Salary", "Income:Investment", "Income:Other"
-        ]
+        active_cats = [c["account"] for c in cat_mgr.list_categories(include_archived=False)]
+        allowed = active_cats or [c["account"] for c in DEFAULT_CATEGORIES]
         return ai_service.get_category_suggestion(req.payee, req.narration, req.amount, allowed)
 
     class AITestRequest(BaseModel):

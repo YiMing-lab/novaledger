@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { AccountItem, CategoryItem, DebtItem, TransactionItem } from "../../api/types";
 import { api } from "../../api/client";
 import { Button, DialogModal, Input, Label, Select, Switch, useToast } from "../ui/primitives";
-import { getTodayStr, formatCurrency } from "../../lib/utils";
+import { getTodayStr, formatCurrency, getCategoryDisplayName } from "../../lib/utils";
 import { Sparkles, RotateCcw } from "lucide-react";
 
 interface RecordModalProps {
@@ -369,6 +369,16 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 </button>
               </div>
               <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+                {txType === "expense" &&
+                  !expenseCats.some((c) => c.account === category) &&
+                  category && (
+                    <option value={category}>{getCategoryDisplayName(category)}</option>
+                  )}
+                {txType === "income" &&
+                  !incomeCats.some((c) => c.account === category) &&
+                  category && (
+                    <option value={category}>{getCategoryDisplayName(category)}</option>
+                  )}
                 {(txType === "expense" ? expenseCats : incomeCats).map((c) => (
                   <option key={c.id} value={c.account}>
                     {c.name}

@@ -20,7 +20,7 @@ import {
   SheetDrawer,
   useToast,
 } from "../components/ui/primitives";
-import { formatCurrency } from "../lib/utils";
+import { BUILTIN_CATEGORY_NAMES, formatCurrency, getCategoryDisplayName } from "../lib/utils";
 import {
   BarChart3,
   Store,
@@ -72,7 +72,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const activeMonth = selectedMonth === "all" ? report?.month || new Date().toISOString().slice(0, 7) : selectedMonth;
 
   const nameMap = useMemo(() => {
-    const map: Record<string, string> = {};
+    const map: Record<string, string> = {
+      ...BUILTIN_CATEGORY_NAMES,
+    };
     accounts.forEach((a) => (map[a.account] = a.name));
     categories.forEach((c) => (map[c.account] = c.name));
     return map;
@@ -372,7 +374,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 <div className="py-12 text-center text-xs text-muted-foreground">当月暂无支出数据</div>
               ) : (
                 catRanking.map((item, idx) => {
-                  const catName = nameMap[item.category] || item.category;
+                  const catName = getCategoryDisplayName(item.category, nameMap);
                   const merchantCount = item.merchants?.length || 0;
                   const itemPct = item.percentage ?? item.ratio ?? 0;
                   return (
@@ -510,7 +512,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                             <div className="flex flex-wrap gap-1">
                               {(m.categories || []).map((c) => (
                                 <Badge key={c} variant="secondary">
-                                  {nameMap[c] || c}
+                                  {getCategoryDisplayName(c, nameMap)}
                                 </Badge>
                               ))}
                             </div>
@@ -667,7 +669,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       <SheetDrawer
         open={Boolean(drillCategory)}
         onClose={() => setDrillCategory(null)}
-        title={drillCategory ? `分类明细：${nameMap[drillCategory.category] || drillCategory.category}` : ""}
+        title={drillCategory ? `分类明细：${getCategoryDisplayName(drillCategory.category, nameMap)}` : ""}
         subtitle={
           drillCategory
             ? `${activeMonth} 共支出 ${formatCurrency(drillCategory.amount)} (占当月总支出 ${drillCategory.percentage ?? drillCategory.ratio ?? 0}%)`
@@ -725,7 +727,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <div>
                     <div className="font-medium">{tx.narration || tx.payee}</div>
                     <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                      {tx.date} · {nameMap[tx.category] || tx.category}
+                      {tx.date} · {getCategoryDisplayName(tx.category, nameMap)}
                     </div>
                   </div>
                   <div className="font-mono font-bold">

@@ -20,7 +20,12 @@ import {
   Switch,
   useToast,
 } from "../components/ui/primitives";
-import { formatCurrency, getTodayStr } from "../lib/utils";
+import {
+  BUILTIN_CATEGORY_NAMES,
+  formatCurrency,
+  getCategoryDisplayName,
+  getTodayStr,
+} from "../lib/utils";
 import {
   Plus,
   Search,
@@ -106,13 +111,31 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   const nameMap = useMemo(() => {
     const map: Record<string, string> = {
-      "Equity:Opening-Balances": "期初余额",
+      ...BUILTIN_CATEGORY_NAMES,
     };
     accounts.forEach((a) => (map[a.account] = a.name));
     categories.forEach((c) => (map[c.account] = c.name));
     debts.forEach((d) => (map[d.account] = d.name));
     return map;
   }, [accounts, categories, debts]);
+
+  const allFilterCategories = useMemo(() => {
+    const list: { account: string; name: string }[] = categories
+      .filter((c) => !c.is_archived)
+      .map((c) => ({ account: c.account, name: c.name }));
+    const existing = new Set(list.map((c) => c.account));
+    transactions.forEach((t) => {
+      if (
+        t.category &&
+        !existing.has(t.category) &&
+        (t.category.startsWith("Expenses:") || t.category.startsWith("Income:"))
+      ) {
+        existing.add(t.category);
+        list.push({ account: t.category, name: getCategoryDisplayName(t.category, nameMap) });
+      }
+    });
+    return list;
+  }, [categories, transactions, nameMap]);
 
   const formatAccOption = (a: AccountItem) =>
     `${a.name}${a.card_tail ? ` (尾号${a.card_tail})` : ""}${a.is_archived ? " (已归档)" : ""}`;
@@ -179,7 +202,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       const res = await api.getAISuggestion(editPayee, editNarration, editAmount || "0");
       if (res.suggested_category) {
         setEditCategory(res.suggested_category);
-        toast.success(`已推荐分类: ${nameMap[res.suggested_category] || res.suggested_category}`);
+        toast.success(`已推荐分类: ${getCategoryDisplayName(res.suggested_category, nameMap)}`);
       }
     } catch (e: any) {
       toast.error(`AI 推荐失败: ${e.message}`);
@@ -251,7 +274,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         account: tx.account,
         is_offset: tx.is_offset,
       });
-      toast.success(`已修改为「${nameMap[newCategory] || newCategory}」`);
+      toast.success(`已修改为「${getCategoryDisplayName(newCategory, nameMap)}」`);
       onRefresh();
     } catch (err: any) {
       toast.error(`修改失败: ${err.message}`);
@@ -291,8 +314,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           const hit =
             (tx.payee || "").toLowerCase().includes(q) ||
             (tx.narration || "").toLowerCase().includes(q) ||
-            (nameMap[tx.category] || tx.category || "").toLowerCase().includes(q) ||
+            (getCategoryDisplayName(tx.category, nameMap) || "").toLowerCase().includes(q) ||
+            (tx.category || "").toLowerCase().includes(q) ||
             (nameMap[tx.account] || tx.account || "").toLowerCase().includes(q) ||
+            (tx.account || "").toLowerCase().includes(q) ||
             String(tx.amount).includes(q);
           if (!hit) return false;
         }
@@ -348,7 +373,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         }
       } else if (groupBy === "category") {
         key = tx.category || "Expenses:Other:General";
-        const catName = nameMap[tx.category] || tx.category || "未分类";
+        const catName = getCategoryDisplayName(tx.category, nameMap) || "未分类";
         title = `📂 ${catName}`;
       } else if (groupBy === "account") {
         key = tx.account || "Assets:Bank:Default";
@@ -583,7 +608,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             {normType === "expense" && (
               <>
                 {!expenseCats.some((c) => c.account === tx.category) && tx.category && (
-                  <option value={tx.category}>{nameMap[tx.category] || tx.category}</option>
+                  <option value={tx.category}>{getCategoryDisplayName(tx.category, nameMap)}</option>
                 )}
                 {expenseCats.map((c) => (
                   <option key={c.id} value={c.account}>
@@ -595,7 +620,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             {normType === "income" && (
               <>
                 {!incomeCats.some((c) => c.account === tx.category) && tx.category && (
-                  <option value={tx.category}>{nameMap[tx.category] || tx.category}</option>
+                  <option value={tx.category}>{getCategoryDisplayName(tx.category, nameMap)}</option>
                 )}
                 {incomeCats.map((c) => (
                   <option key={c.id} value={c.account}>
@@ -849,8 +874,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               className="w-44"
             >
               <option value="all">全部分类</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.account}>
+              {allFilterCategories.map((c) => (
+                <option key={c.account} value={c.account}>
                   {c.name}
                 </option>
               ))}
@@ -1136,6 +1161,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                     </button>
                   </div>
                   <Select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
+                    {editType === "expense" &&
+                      !expenseCats.some((c) => c.account === editCategory) &&
+                      editCategory && (
+                        <option value={editCategory}>
+                          {getCategoryDisplayName(editCategory, nameMap)}
+                        </option>
+                      )}
+                    {editType === "income" &&
+                      !incomeCats.some((c) => c.account === editCategory) &&
+                      editCategory && (
+                        <option value={editCategory}>
+                          {getCategoryDisplayName(editCategory, nameMap)}
+                        </option>
+                      )}
                     {(editType === "expense" ? expenseCats : incomeCats).map((c) => (
                       <option key={c.id} value={c.account}>
                         {c.name}
@@ -1226,7 +1265,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 {previewPostings.map((p, idx) => (
                   <div key={idx} className="flex items-center justify-between px-3 py-2">
                     <div>
-                      <div className="font-medium">{nameMap[p.account] || p.account}</div>
+                      <div className="font-medium">{getCategoryDisplayName(p.account, nameMap)}</div>
                       <div className="text-[11px] font-mono text-muted-foreground">{p.account}</div>
                     </div>
                     <div

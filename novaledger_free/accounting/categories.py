@@ -9,22 +9,33 @@ DEFAULT_CATEGORIES = [
     {"id": "cat_food_snacks", "name": "零食水果", "account": "Expenses:Food:Snacks", "type": "expense", "icon": "icecream"},
     {"id": "cat_transport_taxi", "name": "打车出行", "account": "Expenses:Transport:Taxi", "type": "expense", "icon": "local_taxi"},
     {"id": "cat_transport_transit", "name": "交通通行", "account": "Expenses:Transport:Transit", "type": "expense", "icon": "directions_subway"},
+    {"id": "cat_transport_public", "name": "公共交通", "account": "Expenses:Transport:Public", "type": "expense", "icon": "directions_bus"},
+    {"id": "cat_travel", "name": "旅行支出", "account": "Expenses:Travel", "type": "expense", "icon": "flight"},
+    {"id": "cat_travel_lodging", "name": "酒店住宿", "account": "Expenses:Travel:Lodging", "type": "expense", "icon": "hotel"},
+    {"id": "cat_travel_tickets", "name": "交通车票", "account": "Expenses:Travel:Tickets", "type": "expense", "icon": "confirmation_number"},
     {"id": "cat_housing_rent", "name": "住房房租", "account": "Expenses:Housing:Rent", "type": "expense", "icon": "home"},
     {"id": "cat_housing_utilities", "name": "水电物业", "account": "Expenses:Housing:Utilities", "type": "expense", "icon": "bolt"},
     {"id": "cat_shopping_daily", "name": "日常百货", "account": "Expenses:Shopping:Daily", "type": "expense", "icon": "local_mall"},
     {"id": "cat_shopping_digital", "name": "数码配件", "account": "Expenses:Shopping:Digital", "type": "expense", "icon": "devices"},
+    {"id": "cat_shopping_electronics", "name": "数码配件", "account": "Expenses:Shopping:Electronics", "type": "expense", "icon": "devices"},
     {"id": "cat_shopping_clothing", "name": "服饰鞋包", "account": "Expenses:Shopping:Clothing", "type": "expense", "icon": "checkroom"},
     {"id": "cat_entertainment", "name": "休闲娱乐", "account": "Expenses:Entertainment", "type": "expense", "icon": "sports_esports"},
+    {"id": "cat_entertainment_general", "name": "休闲娱乐", "account": "Expenses:Entertainment:General", "type": "expense", "icon": "sports_esports"},
     {"id": "cat_health_medical", "name": "医疗健康", "account": "Expenses:Health:Medical", "type": "expense", "icon": "medical_services"},
-    {"id": "cat_travel_lodging", "name": "酒店住宿", "account": "Expenses:Travel:Lodging", "type": "expense", "icon": "hotel"},
+    {"id": "cat_education", "name": "学习教育", "account": "Expenses:Education", "type": "expense", "icon": "school"},
+    {"id": "cat_social", "name": "人情社交", "account": "Expenses:Social", "type": "expense", "icon": "card_giftcard"},
     {"id": "cat_financial_interest", "name": "贷款利息", "account": "Expenses:Financial:Interest", "type": "expense", "icon": "account_balance"},
     {"id": "cat_other_general", "name": "日常其他", "account": "Expenses:Other:General", "type": "expense", "icon": "more_horiz"},
     {"id": "cat_other", "name": "其他杂项", "account": "Expenses:Other", "type": "expense", "icon": "category"},
     {"id": "cat_income_salary", "name": "工资薪金", "account": "Income:Salary", "type": "income", "icon": "payments"},
     {"id": "cat_income_invest", "name": "投资收益", "account": "Income:Investment", "type": "income", "icon": "trending_up"},
+    {"id": "cat_income_invest_pnl", "name": "理财收益", "account": "Income:Invest:PnL", "type": "income", "icon": "trending_up"},
+    {"id": "cat_income_sell", "name": "物品出售", "account": "Income:Sell", "type": "income", "icon": "storefront"},
     {"id": "cat_income_other", "name": "其他收入", "account": "Income:Other", "type": "income", "icon": "attach_money"},
     {"id": "cat_income_transfer", "name": "转账存入", "account": "Income:Transfer:Incoming", "type": "income", "icon": "savings"}
 ]
+
+CATEGORY_NAME_MAP: Dict[str, str] = {c["account"]: c["name"] for c in DEFAULT_CATEGORIES}
 
 
 class CategoryManager:
@@ -36,11 +47,27 @@ class CategoryManager:
         self._ensure_initialized()
 
     def _ensure_initialized(self) -> None:
-        """确保 config.json 中存在 categories 键，若无则初始化默认分类"""
+        """确保 config.json 中存在 categories 键，若无则初始化默认分类；若已存在则补充缺失的基础默认分类并规整图标"""
         cats = self.config_mgr.config.get("categories")
         if cats is None:
             self.config_mgr.config["categories"] = [dict(c) for c in DEFAULT_CATEGORIES]
             self.config_mgr.save_config()
+        else:
+            existing_accs = {c.get("account"): c for c in cats if isinstance(c, dict)}
+            changed = False
+            for def_cat in DEFAULT_CATEGORIES:
+                acc = def_cat["account"]
+                if acc not in existing_accs:
+                    cats.append(dict(def_cat))
+                    changed = True
+                else:
+                    curr = existing_accs[acc]
+                    # 如果原配置存入的是 emoji 等非常规图标，规整为标准 icon 名称
+                    if curr.get("icon") and any(ord(ch) > 1000 for ch in curr["icon"]):
+                        curr["icon"] = def_cat["icon"]
+                        changed = True
+            if changed:
+                self.config_mgr.save_config()
 
     def list_categories(self, include_archived: bool = False) -> List[Dict[str, Any]]:
         self._ensure_initialized()
@@ -59,6 +86,9 @@ class CategoryManager:
         acc = account.strip()
         for c in self.list_categories(include_archived=True):
             if c["account"] == acc:
+                return c
+        for c in self.list_categories(include_archived=True):
+            if c["account"].lower() == acc.lower():
                 return c
         return None
 
